@@ -286,7 +286,7 @@ export default function Sales() {
     field: keyof DailySale,
     value: string,
   ) => {
-    if (isSubmitted) return;
+    if (isSubmitted && !isAdmin) return;
     const numValue =
       field === "mrp" ? value : value === "" ? 0 : parseInt(value, 10);
     setLocalSales((prev) =>
@@ -326,7 +326,7 @@ export default function Sales() {
   };
 
   const handleSave = () => {
-    if (isSubmitted) return;
+    if (isSubmitted && !isAdmin) return;
     const negativeItems = localSales.filter((item) => (item.soldBottles || 0) < 0);
     if (negativeItems.length > 0) {
       const names = negativeItems.map((item) => `${item.brandName} (${item.size})`).join(", ");
@@ -358,7 +358,7 @@ export default function Sales() {
   };
 
   const handleSubmit = () => {
-    if (isSubmitted) return;
+    if (isSubmitted && !isAdmin) return;
     if (!localSales || localSales.length === 0) {
       toast({
         title: "No Data",
@@ -371,8 +371,10 @@ export default function Sales() {
     submitSales(selectedDate, {
       onSuccess: () => {
         toast({
-          title: "Sales Submitted",
-          description: `Sales for ${selectedDate} have been finalized and locked.`,
+          title: isSubmitted ? "Sales Re-Submitted" : "Sales Submitted",
+          description: isSubmitted
+            ? `Sales for ${selectedDate} have been re-submitted successfully.`
+            : `Sales for ${selectedDate} have been finalized and locked.`,
           className: "bg-green-50 border-green-200 text-green-800",
         });
       },
@@ -620,6 +622,12 @@ export default function Sales() {
               </div>
             ) : (
               <>
+                {isAdmin && isSubmitted && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs font-medium dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-400" data-testid="status-already-submitted-info">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Sales already submitted
+                  </div>
+                )}
                 <button
                   onClick={handleSave}
                   disabled={isSaving}

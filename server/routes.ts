@@ -403,6 +403,33 @@ async function parseUploadedFile(buffer: Buffer, filename: string): Promise<{ or
 import { setupAuth } from "./auth";
 import bcrypt from "bcryptjs";
 
+/** Convert various invoice date formats to YYYY-MM-DD for comparison */
+function normalizeInvoiceDate(invDate: string): string | null {
+  if (!invDate) return null;
+  // Already ISO: "2025-12-30"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(invDate)) return invDate;
+  // "30-Dec-2025" or "30-Jan-2026"
+  const MONTHS: Record<string, string> = {
+    jan:"01", feb:"02", mar:"03", apr:"04", may:"05", jun:"06",
+    jul:"07", aug:"08", sep:"09", oct:"10", nov:"11", dec:"12",
+  };
+  const m1 = invDate.match(/^(\d{1,2})-([A-Za-z]+)-(\d{4})$/);
+  if (m1) {
+    const monthNum = MONTHS[m1[2].toLowerCase()];
+    if (monthNum) return `${m1[3]}-${monthNum}-${m1[1].padStart(2, "0")}`;
+  }
+  // "30/12/2025" or "30-12-2025"
+  const m2 = invDate.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m2) return `${m2[3]}-${m2[2].padStart(2,"0")}-${m2[1].padStart(2,"0")}`;
+  return null;
+}
+
+/** Extract size string from packSize like "48 / 180 ml" → "180 ml" */
+function extractSizeFromPackSize(packSize: string): string {
+  const parts = packSize.split("/");
+  return parts.length >= 2 ? parts[1].trim() : packSize.trim();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
@@ -414,31 +441,62 @@ export async function registerRoutes(
     const date = req.query.date as string | undefined;
     if (date) {
       const sales = await storage.getDailySalesByDate(date);
-      // Fetch previous day daily_stock snapshot
+
+      // Opening balance: previous day's daily_stock snapshot
       const prevDate = new Date(date);
       prevDate.setDate(prevDate.getDate() - 1);
       const prevDateStr = prevDate.toISOString().split("T")[0];
       const prevDayStock = await storage.getDailyStockByDate(prevDateStr);
+
+      // New Stock (Cs/Btls): aggregate from orders whose invoice_date matches selected date
+      const allOrders = await storage.getOrders();
+      const matchingOrders = allOrders.filter((o) => {
+        const norm = normalizeInvoiceDate(o.invoiceDate || "");
+        return norm === date;
+      });
+
+      // Build map: brandNumber + normalizedSize → {cases, bottles}
+      const normSize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "");
+      type OrderAgg = { cases: number; bottles: number };
+      const orderNewStk = new Map<string, OrderAgg>();
+      for (const o of matchingOrders) {
+        const size = extractSizeFromPackSize(o.packSize);
+        const key = `${o.brandNumber}|${normSize(size)}`;
+        const existing = orderNewStk.get(key) || { cases: 0, bottles: 0 };
+        existing.cases += o.qtyCasesDelivered ?? 0;
+        existing.bottles += o.qtyBottlesDelivered ?? 0;
+        orderNewStk.set(key, existing);
+      }
+
       // Fetch sales MRP overrides
       const salesMrpList = await storage.getSalesMrpDetails();
+
       const salesWithOverrides = sales.map((sale) => {
+        // Opening balance from previous day's stock snapshot
         const prevStock = prevDayStock.find((s) => {
           if (s.brandNumber !== sale.brandNumber) return false;
-          const sNorm = s.size.trim().toLowerCase().replace(/\s+/g, "");
-          const dNorm = sale.size.trim().toLowerCase().replace(/\s+/g, "");
+          const sNorm = normSize(s.size);
+          const dNorm = normSize(sale.size);
           return sNorm === dNorm || sNorm.includes(dNorm) || dNorm.includes(sNorm);
         });
+
+        // New Stk from matching orders for selected date
+        const orderKey = `${sale.brandNumber}|${normSize(sale.size)}`;
+        const orderAgg = orderNewStk.get(orderKey);
+
         const mrpOverride = salesMrpList.find((m) => {
           if (m.brandNumber !== sale.brandNumber) return false;
-          const sNorm = m.size.trim().toLowerCase().replace(/\s+/g, "");
-          const dNorm = sale.size.trim().toLowerCase().replace(/\s+/g, "");
+          const sNorm = normSize(m.size);
+          const dNorm = normSize(sale.size);
           return sNorm === dNorm || sNorm.includes(dNorm) || dNorm.includes(sNorm);
         });
+
         return {
           ...sale,
           openingBalanceBottles: prevDayStock.length > 0 ? (prevStock?.totalStockBottles ?? 0) : 0,
-          newStockCases: prevDayStock.length > 0 ? (prevStock?.stockInCases ?? sale.newStockCases) : sale.newStockCases,
-          newStockBottles: prevDayStock.length > 0 ? (prevStock?.stockInBottles ?? sale.newStockBottles) : sale.newStockBottles,
+          // New Stk always from orders matching this date (0 if none)
+          newStockCases: orderAgg ? orderAgg.cases : 0,
+          newStockBottles: orderAgg ? orderAgg.bottles : 0,
           mrp: mrpOverride ? mrpOverride.salesMrp : sale.mrp,
         };
       });
@@ -482,12 +540,14 @@ export async function registerRoutes(
   app.post(api.sales.submit.path, async (req, res) => {
     try {
       const { date } = api.sales.submit.input.parse(req.body);
+      const isAdmin = (req.user as any)?.role === "admin";
       const alreadySubmitted = await storage.isSalesSubmittedForDate(date);
-      if (alreadySubmitted) {
+      // Employee: block re-submission. Admin: allow re-submission (just re-marks as submitted)
+      if (alreadySubmitted && !isAdmin) {
         return res.status(400).json({ message: "Sales for this date are already submitted." });
       }
       const submittedCount = await storage.submitSalesForDate(date);
-      res.json({ submittedCount });
+      res.json({ submittedCount, alreadySubmitted });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message });
@@ -500,21 +560,22 @@ export async function registerRoutes(
     try {
       const input = api.sales.bulkUpdate.input.parse(req.body);
       const date = req.query.date as string | undefined;
-      
+      const isAdminUser = (req.user as any)?.role === "admin";
+
       // Resolve effective date: use provided date or default to today
       const effectiveDate = date || new Date().toISOString().split('T')[0];
 
       let result: DailySale[];
       if (date) {
         const isSubmitted = await storage.isSalesSubmittedForDate(date);
-        if (isSubmitted) {
+        // Only employees are blocked by submission lock; admin can always re-save
+        if (isSubmitted && !isAdminUser) {
           return res.status(400).json({ message: "Sales for this date are already submitted and cannot be edited." });
         }
         result = await storage.bulkUpdateDailySalesForDate(input, date);
       } else {
-        // Legacy path: use today's date, also enforce submission lock
         const todaySubmitted = await storage.isSalesSubmittedForDate(effectiveDate);
-        if (todaySubmitted) {
+        if (todaySubmitted && !isAdminUser) {
           return res.status(400).json({ message: "Sales for today are already submitted and cannot be edited." });
         }
         result = await storage.bulkUpdateDailySales(input);
@@ -607,17 +668,7 @@ export async function registerRoutes(
     try {
       const input = api.orders.bulkCreate.input.parse(req.body);
       const result = await storage.bulkCreateOrders(input);
-
-      const syncResult = await storage.syncOrdersToStock();
-      console.log(
-        `Stock sync: ${syncResult.updatedStockCount} stock items updated from ${syncResult.syncedOrderIds.length} orders`,
-      );
-
-      const salesSync = await storage.syncStockToDailySales();
-      console.log(
-        `Sales sync: ${salesSync.updatedSalesCount} updated, ${salesSync.createdSalesCount} created in daily sales from stock`,
-      );
-
+      // Orders are stored only — stock is updated exclusively from "Save Sales"
       res.status(201).json(result);
     } catch (err) {
       if (err instanceof z.ZodError) {
