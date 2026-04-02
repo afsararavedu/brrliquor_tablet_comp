@@ -733,7 +733,7 @@ export default function Sales() {
                         {totalStock}
                       </td>
                       <td className="table-cell p-1 bg-orange-50/30 border-r border-border">
-                        {isSubmitted ? (
+                        {isSubmitted && !isAdmin ? (
                           <span className="block w-full text-center font-bold text-foreground py-1">{item.closingBalanceCases || 0}</span>
                         ) : (
                           <input
@@ -753,7 +753,7 @@ export default function Sales() {
                         )}
                       </td>
                       <td className="table-cell p-1 bg-orange-50/30 border-r border-border">
-                        {isSubmitted ? (
+                        {isSubmitted && !isAdmin ? (
                           <span className="block w-full text-center font-bold text-foreground py-1">{item.closingBalanceBottles || 0}</span>
                         ) : (
                           <input
@@ -784,7 +784,7 @@ export default function Sales() {
                         ₹{item.saleValue}
                       </td>
                       <td className="table-cell p-1 border-r border-border">
-                        {isSubmitted ? (
+                        {isSubmitted && !isAdmin ? (
                           <span className="block w-full text-center py-1">{item.breakageBottles || 0}</span>
                         ) : (
                           <input
