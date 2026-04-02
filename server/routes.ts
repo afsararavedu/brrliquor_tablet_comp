@@ -460,37 +460,7 @@ export async function registerRoutes(
       // Build normalised size helper
       const normSize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "");
 
-      // Build TWO opening balance maps:
-      //
-      // openingBalMapStrict: used for EXISTING saved records — only uses
-      //   confirmed historical sources (daily_stock or daily_sales[D-1]).
-      //   Falls back to the record's own stored value (no stock_details).
-      //
-      // openingBalMapFull: used for VIRTUAL rows (no records for this date) —
-      //   adds stock_details as the final fallback so new dates always show
-      //   something meaningful even before the user has saved any sales.
-
-      const openingBalMapStrict = new Map<string, number>();
-      // Level 2: previous day's daily_sales closing stock
-      for (const s of prevDaySales) {
-        const key = `${s.brandNumber}|${normSize(s.size)}`;
-        openingBalMapStrict.set(key, s.totalClosingStock ?? 0);
-      }
-      // Level 1 (highest): previous day's daily_stock snapshot
-      for (const s of prevDayStock) {
-        const key = `${s.brandNumber}|${normSize(s.size)}`;
-        openingBalMapStrict.set(key, s.totalStockBottles ?? 0);
-      }
-
-      // Full map adds stock_details as lowest-priority fallback (for virtual rows)
-      const openingBalMapFull = new Map<string, number>(openingBalMapStrict);
-      for (const s of allStock) {
-        const key = `${s.brandNumber}|${normSize(s.size)}`;
-        if (!openingBalMapFull.has(key)) {
-          openingBalMapFull.set(key, s.totalStockBottles ?? 0);
-        }
-      }
-
+      // Step 1: Build orderNewStk first (needed for opening balance calculation below)
       // New Stock (Cs/Btls): aggregate from orders whose invoice_date matches selected date
       const allOrders = await storage.getOrders();
       const matchingOrders = allOrders.filter((o) => {
@@ -507,6 +477,45 @@ export async function registerRoutes(
         existing.cases += o.qtyCasesDelivered ?? 0;
         existing.bottles += o.qtyBottlesDelivered ?? 0;
         orderNewStk.set(key, existing);
+      }
+
+      // Step 2: Build TWO opening balance maps:
+      //
+      // openingBalMapStrict: used for EXISTING saved records — only uses
+      //   confirmed historical sources (daily_stock or daily_sales[D-1]).
+      //   Falls back to the record's own stored value (no stock_details).
+      //
+      // openingBalMapFull: used for VIRTUAL rows (no records for this date) —
+      //   adds stock_details as the final fallback so new dates always show
+      //   something meaningful even before the user has saved any sales.
+      //   stock_details already includes today's received orders, so subtract
+      //   them to get the stock at the START of the day (true opening balance).
+
+      const openingBalMapStrict = new Map<string, number>();
+      // Level 2: previous day's daily_sales closing stock
+      for (const s of prevDaySales) {
+        const key = `${s.brandNumber}|${normSize(s.size)}`;
+        openingBalMapStrict.set(key, s.totalClosingStock ?? 0);
+      }
+      // Level 1 (highest): previous day's daily_stock snapshot
+      for (const s of prevDayStock) {
+        const key = `${s.brandNumber}|${normSize(s.size)}`;
+        openingBalMapStrict.set(key, s.totalStockBottles ?? 0);
+      }
+
+      // Full map: openingBalMapStrict + stock_details fallback (minus today's orders)
+      const openingBalMapFull = new Map<string, number>(openingBalMapStrict);
+      for (const s of allStock) {
+        const key = `${s.brandNumber}|${normSize(s.size)}`;
+        if (!openingBalMapFull.has(key)) {
+          const qtyPerCase = s.quantityPerCase ?? 12;
+          const todayOrders = orderNewStk.get(key);
+          const todayOrderBottles = todayOrders
+            ? todayOrders.cases * qtyPerCase + todayOrders.bottles
+            : 0;
+          const openingBalance = Math.max(0, (s.totalStockBottles ?? 0) - todayOrderBottles);
+          openingBalMapFull.set(key, openingBalance);
+        }
       }
 
       // Fetch sales MRP overrides
@@ -530,24 +539,35 @@ export async function registerRoutes(
             const openingBalance = openingBalMapFull.get(key) ?? 0;
             const orderAgg = orderNewStk.get(key);
             const mrpOverride = findMrpOverride(stock.brandNumber, stock.size);
+            const qtyPerCase = stock.quantityPerCase ?? 12;
+            const newStockCases = orderAgg ? orderAgg.cases : 0;
+            const newStockBottles = orderAgg ? orderAgg.bottles : 0;
+            // Auto-fill closing balance = total available stock (opening + new stock)
+            // so "no-sales" days save correctly without manual entry
+            const totalAvailableBottles = openingBalance + newStockCases * qtyPerCase + newStockBottles;
+            const closingBalanceCases = Math.floor(totalAvailableBottles / qtyPerCase);
+            const closingBalanceBottles = totalAvailableBottles % qtyPerCase;
+            const totalClosingStock = totalAvailableBottles;
+            const mrpVal = mrpOverride ? mrpOverride.salesMrp : (stock.mrp || "0");
+            const finalClosingBalance = String(Math.round(Number(mrpVal) * totalClosingStock * 100) / 100);
             return {
               id: -(idx + 1),
               brandNumber: stock.brandNumber,
               brandName: stock.brandName,
               size: stock.size,
-              quantityPerCase: stock.quantityPerCase ?? 12,
+              quantityPerCase: qtyPerCase,
               openingBalanceBottles: openingBalance,
-              newStockCases: orderAgg ? orderAgg.cases : 0,
-              newStockBottles: orderAgg ? orderAgg.bottles : 0,
-              closingBalanceCases: 0,
-              closingBalanceBottles: 0,
+              newStockCases,
+              newStockBottles,
+              closingBalanceCases,
+              closingBalanceBottles,
               soldBottles: 0,
-              mrp: mrpOverride ? mrpOverride.salesMrp : (stock.mrp || "0"),
+              mrp: mrpVal,
               saleValue: "0",
               totalSaleValue: "0",
               breakageBottles: 0,
-              totalClosingStock: 0,
-              finalClosingBalance: "0",
+              totalClosingStock,
+              finalClosingBalance,
               date: date,
               isSubmitted: false,
               createdAt: null,
