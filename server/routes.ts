@@ -953,59 +953,12 @@ export async function registerRoutes(
       return;
     }
 
-    const sampleData = [
-      {
-        "Sl.No.": 1,
-        "Brand Number": "5029",
-        "Brand Name": "KINGFISHER ULTRA LAGER BEER",
-        "Product Type": "Beer",
-        "Pack Type": "G",
-        "Pack Qty / Size (ml)": "12 / 650 ml",
-        "Qty Cases Delivered": 22,
-        "Qty Bottles Delivered": 0,
-        "Rate Per Case": "2201.00",
-        "Unit Rate Per Bottle": "183.42",
-        "Total Amount": "48422.00",
-        "Breakage Btl Qty": 0,
-        Remarks: "",
-      },
-      {
-        "Sl.No.": 5,
-        "Brand Number": "0110",
-        "Brand Name": "OFFICER'S CHOICE RESERVE WHISKY",
-        "Product Type": "IML",
-        "Pack Type": "G",
-        "Pack Qty / Size (ml)": "48 / 180 ml",
-        "Qty Cases Delivered": 29,
-        "Qty Bottles Delivered": 47,
-        "Rate Per Case": "5204.00",
-        "Unit Rate Per Bottle": "108.42",
-        "Total Amount": "156011.58",
-        "Breakage Btl Qty": 0,
-        Remarks: "",
-      },
-    ];
-
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(sampleData);
-    ws["!cols"] = [
-      { wch: 6 },
-      { wch: 14 },
-      { wch: 45 },
-      { wch: 14 },
-      { wch: 10 },
-      { wch: 20 },
-      { wch: 18 },
-      { wch: 20 },
-      { wch: 14 },
-      { wch: 20 },
-      { wch: 14 },
-      { wch: 16 },
-      { wch: 15 },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws, "Invoice Template");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-
+    const xlsxPath = path.resolve(
+      "attached_assets/Invoice_Template_1775231757722.xlsx",
+    );
+    if (!fs.existsSync(xlsxPath)) {
+      return res.status(404).json({ message: "Template Excel file not found" });
+    }
     res.setHeader(
       "Content-Disposition",
       "attachment; filename=Invoice_Template.xlsx",
@@ -1014,7 +967,7 @@ export async function registerRoutes(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
-    res.send(buf);
+    fs.createReadStream(xlsxPath).pipe(res);
   });
 
   // Upload
