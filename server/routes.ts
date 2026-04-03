@@ -87,7 +87,8 @@ const COLUMN_MAP: Record<string, keyof typeof EMPTY_ORDER> = {
 };
 
 function mapHeaderToField(header: string): keyof typeof EMPTY_ORDER | null {
-  const normalized = header.trim().toLowerCase();
+  // Strip colons and normalize so "Invoice Date:" matches "invoice date"
+  const normalized = header.trim().toLowerCase().replace(/:/g, "").trim();
   return COLUMN_MAP[normalized] || null;
 }
 
@@ -111,6 +112,13 @@ function rowToOrder(
       field === "totalAmount"
     ) {
       (order as any)[field] = String(val);
+    } else if (field === "invoiceDate") {
+      // Excel stores dates as serial numbers — convert to readable string
+      if (typeof val === "number" && val > 1000) {
+        (order as any)[field] = excelSerialToDateStr(val);
+      } else {
+        (order as any)[field] = String(val).trim();
+      }
     } else {
       (order as any)[field] = String(val);
     }
@@ -118,12 +126,23 @@ function rowToOrder(
   return order;
 }
 
+function excelSerialToDateStr(serial: number): string {
+  // Excel stores dates as days since 1899-12-30
+  const date = new Date((serial - 25569) * 86400 * 1000);
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const month = months[date.getUTCMonth()];
+  const year = date.getUTCFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 function parseSpreadsheet(buffer: Buffer, filename: string) {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: false });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const jsonRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, {
     defval: "",
+    raw: true,
   });
 
   if (jsonRows.length === 0) {
