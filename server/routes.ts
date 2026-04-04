@@ -865,13 +865,12 @@ export async function registerRoutes(
       const prevDateStr = prevDate.toISOString().split("T")[0];
       const prevSales = await storage.getDailySalesByDate(prevDateStr);
 
-      // Opening Balance Value = sum of previous day's finalClosingBalance
-      // Include rows where: invoice_date is NULL/empty (always include)
-      //                  OR D-1 > invoice_date (stock already arrived before D-1)
-      const openingBalanceValue = prevSales.reduce((acc, s) => {
-        if (s.invoiceDate && prevDateStr <= s.invoiceDate) return acc;
-        return acc + (parseFloat(s.finalClosingBalance as string) || 0);
-      }, 0);
+      // Opening Balance Value = sum of D-1's finalClosingBalance
+      // Simple rule: if D-1 has saved sales, use their closing balance; else 0
+      const openingBalanceValue = prevSales.reduce(
+        (acc, s) => acc + (parseFloat(s.finalClosingBalance as string) || 0),
+        0
+      );
 
       const allOrders = await storage.getOrders();
       const orderTypeMap: Record<string, string> = {};
