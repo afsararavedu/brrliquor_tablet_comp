@@ -550,7 +550,7 @@ export default function Sales() {
             </div>
             <button
               onClick={() => syncFromStock()}
-              disabled={isSyncing || isSubmitted}
+              disabled={true}
               data-testid="button-sync-stock-to-sales"
               className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-xl font-medium shadow-md hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
