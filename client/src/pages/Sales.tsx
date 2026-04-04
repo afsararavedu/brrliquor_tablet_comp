@@ -463,17 +463,12 @@ export default function Sales() {
                     setDatePickerOpen(false);
                   }
                 }}
+                fromDate={earliestInvoiceDate ?? undefined}
+                toDate={new Date()}
                 disabled={(date) => {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  if (date > today) return true;
-                  if (earliestInvoiceDate) {
-                    const minDate = new Date(earliestInvoiceDate);
-                    minDate.setHours(0, 0, 0, 0);
-                    if (date < minDate) return true;
-                  }
                   if (isAdmin) return false;
-                  const sevenDaysAgo = subDays(today, 6);
+                  const sevenDaysAgo = subDays(new Date(), 6);
+                  sevenDaysAgo.setHours(0, 0, 0, 0);
                   return date < sevenDaysAgo;
                 }}
                 initialFocus
