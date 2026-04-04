@@ -212,7 +212,7 @@ export class DatabaseStorage implements IStorage {
 
     for (const item of stockData) {
       const [created] = await db.insert(stockDetails)
-        .values({ ...item, date: today })
+        .values({ ...item, invoiceDate: item.invoiceDate ?? today })
         .returning();
       results.push(created);
     }
@@ -260,6 +260,7 @@ export class DatabaseStorage implements IStorage {
       bottlesDelivered: number;
       totalBottles: number;
       orderIds: number[];
+      invoiceDate: string | null;
     };
 
     const updateAgg = new Map<string, AggValue>();
@@ -287,6 +288,10 @@ export class DatabaseStorage implements IStorage {
         existing.bottlesDelivered += order.qtyBottlesDelivered ?? 0;
         existing.totalBottles += order.totalBottles ?? 0;
         existing.orderIds.push(order.id);
+        // Keep the most recent invoice date
+        if (order.invoiceDate && (!existing.invoiceDate || order.invoiceDate > existing.invoiceDate)) {
+          existing.invoiceDate = order.invoiceDate;
+        }
       } else {
         aggMap.set(compositeKey, {
           stockId: matchedStock ? matchedStock.id : null,
@@ -299,6 +304,7 @@ export class DatabaseStorage implements IStorage {
           bottlesDelivered: order.qtyBottlesDelivered ?? 0,
           totalBottles: order.totalBottles ?? 0,
           orderIds: [order.id],
+          invoiceDate: order.invoiceDate ?? null,
         });
       }
     }
@@ -322,7 +328,7 @@ export class DatabaseStorage implements IStorage {
           stockInBottles: newBottles,
           totalStockBottles: newTotalBottles,
           totalStockValue: newTotalValue,
-          date: today,
+          invoiceDate: agg.invoiceDate ?? today,
           updatedAt: new Date(),
         })
         .where(eq(stockDetails.id, matchedStock.id));
@@ -346,7 +352,7 @@ export class DatabaseStorage implements IStorage {
         mrp: String(mrpEstimate),
         totalStockValue: totalValue,
         breakage: 0,
-        date: today,
+        invoiceDate: agg.invoiceDate ?? today,
       });
 
       updatedStockCount++;
