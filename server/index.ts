@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 const app = express();
 const httpServer = createServer(app);
@@ -60,6 +62,22 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // One-time migration: rename daily_sales.date → daily_sales.sale_date (if not yet done)
+  try {
+    await db.execute(sql`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='daily_sales' AND column_name='date'
+        ) THEN
+          ALTER TABLE daily_sales RENAME COLUMN "date" TO "sale_date";
+        END IF;
+      END $$
+    `);
+  } catch (e) {
+    console.warn("Column rename migration skipped or already applied:", (e as Error).message);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

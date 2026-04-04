@@ -34,8 +34,8 @@ export default function Reports() {
   const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday start
   const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
   const weeklySales = sales.filter(sale => {
-    if (!sale.date) return false;
-    const d = parseISO(sale.date.toString());
+    if (!sale.saleDate) return false;
+    const d = parseISO(sale.saleDate.toString());
     return isWithinInterval(d, { start: weekStart, end: weekEnd });
   });
 
@@ -44,7 +44,7 @@ export default function Reports() {
   // Build salesData with all 7 weekdays (Mon–Sun), zero-filled for missing days
   const DAYS_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const weeklySalesByDay = weeklySales.reduce((acc: any, sale) => {
-    const day = sale.date ? format(parseISO(sale.date.toString()), "EEE") : "N/A";
+    const day = sale.saleDate ? format(parseISO(sale.saleDate.toString()), "EEE") : "N/A";
     if (!acc[day]) acc[day] = { name: day, value: 0, items: [] };
     acc[day].value = parseFloat((acc[day].value + Number(sale.saleValue || 0)).toFixed(2));
     acc[day].items.push(sale);

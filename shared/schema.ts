@@ -25,11 +25,11 @@ export const dailySales = pgTable("daily_sales", {
   breakageBottles: integer("breakage_bottles").default(0),
   totalClosingStock: integer("total_closing_stock").default(0),
   finalClosingBalance: numeric("final_closing_balance").default('0'),
-  date: date("date").defaultNow(),
+  saleDate: date("sale_date").defaultNow(),
   isSubmitted: boolean("is_submitted").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("daily_sales_brand_size_date_idx").on(table.brandNumber, table.size, table.date),
+  uniqueIndex("daily_sales_brand_size_date_idx").on(table.brandNumber, table.size, table.saleDate),
 ]);
 
 // Table for the "Other Data" -> Order Form (matching Image 1)

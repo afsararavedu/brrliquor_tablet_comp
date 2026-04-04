@@ -104,7 +104,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDailySalesByDate(date: string): Promise<DailySale[]> {
-    return await db.select().from(dailySales).where(eq(dailySales.date, date));
+    return await db.select().from(dailySales).where(eq(dailySales.saleDate, date));
   }
 
   async bulkUpdateDailySales(salesData: InsertDailySale[]): Promise<DailySale[]> {
@@ -113,12 +113,12 @@ export class DatabaseStorage implements IStorage {
     
     for (const sale of salesData) {
       const [updated] = await db.insert(dailySales)
-        .values({ ...sale, date: today })
+        .values({ ...sale, saleDate: today })
         .onConflictDoUpdate({
-          target: [dailySales.brandNumber, dailySales.size, dailySales.date],
+          target: [dailySales.brandNumber, dailySales.size, dailySales.saleDate],
           set: {
             ...sale,
-            date: today,
+            saleDate: today,
           }
         })
         .returning();
@@ -132,9 +132,9 @@ export class DatabaseStorage implements IStorage {
     
     for (const sale of salesData) {
       const [updated] = await db.insert(dailySales)
-        .values({ ...sale, date, isSubmitted: false })
+        .values({ ...sale, saleDate: date, isSubmitted: false })
         .onConflictDoUpdate({
-          target: [dailySales.brandNumber, dailySales.size, dailySales.date],
+          target: [dailySales.brandNumber, dailySales.size, dailySales.saleDate],
           set: {
             closingBalanceCases: sale.closingBalanceCases,
             closingBalanceBottles: sale.closingBalanceBottles,
@@ -157,7 +157,7 @@ export class DatabaseStorage implements IStorage {
     // Mark all daily_sales rows for this date as submitted
     const result = await db.update(dailySales)
       .set({ isSubmitted: true })
-      .where(eq(dailySales.date, date))
+      .where(eq(dailySales.saleDate, date))
       .returning();
     
     // Upsert into authoritative submit_status table
@@ -379,7 +379,7 @@ export class DatabaseStorage implements IStorage {
 
     // Only load today's non-submitted sales records
     let todaySales = await db.select().from(dailySales)
-      .where(and(eq(dailySales.date, today), eq(dailySales.isSubmitted, false)));
+      .where(and(eq(dailySales.saleDate, today), eq(dailySales.isSubmitted, false)));
 
     let updatedSalesCount = 0;
     let createdSalesCount = 0;
@@ -426,9 +426,9 @@ export class DatabaseStorage implements IStorage {
             breakageBottles: 0,
             totalClosingStock: 0,
             finalClosingBalance: '0',
-            date: today,
+            saleDate: today,
           }).onConflictDoUpdate({
-            target: [dailySales.brandNumber, dailySales.size, dailySales.date],
+            target: [dailySales.brandNumber, dailySales.size, dailySales.saleDate],
             set: {
               openingBalanceBottles: stock.totalStockBottles ?? 0,
               newStockCases: stock.stockInCases ?? 0,
@@ -457,7 +457,7 @@ export class DatabaseStorage implements IStorage {
 
     // Select ALL sales for this date (submitted or not — the route handles auth)
     const dateSales = await db.select().from(dailySales)
-      .where(eq(dailySales.date, targetDate));
+      .where(eq(dailySales.saleDate, targetDate));
     const allStock = await db.select().from(stockDetails);
 
     if (dateSales.length === 0 || allStock.length === 0) {
@@ -525,7 +525,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertDailyStockSnapshot(date: string): Promise<void> {
-    const dateSales = await db.select().from(dailySales).where(eq(dailySales.date, date));
+    const dateSales = await db.select().from(dailySales).where(eq(dailySales.saleDate, date));
     for (const sale of dateSales) {
       const totalValue = (sale.totalClosingStock ?? 0) * parseFloat(sale.mrp as string);
       await db.insert(dailyStock).values({
