@@ -33,6 +33,9 @@
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
 
+  --popover: 210 20% 96%;
+  --popover-foreground: 222 47% 11%;
+
   --radius: 0.75rem;
 
   --text-body: 1rem;
