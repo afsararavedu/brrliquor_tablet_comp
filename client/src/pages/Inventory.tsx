@@ -18,7 +18,18 @@ import {
   Store,
   Tag,
   Pencil,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { type InsertOrder, type Order, type ShopDetail, type SalesMrpDetail } from "@shared/schema";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -105,6 +116,7 @@ export default function Inventory() {
   const [selectedIcdcNumber, setSelectedIcdcNumber] = useState<string>("");
 
   // === SALES MRP STATE ===
+  const [brandNoComboOpen, setBrandNoComboOpen] = useState(false);
   const [mrpBrandNumber, setMrpBrandNumber] = useState("");
   const [mrpBrandName, setMrpBrandName] = useState("");
   const [mrpProductType, setMrpProductType] = useState("");
@@ -769,20 +781,47 @@ export default function Inventory() {
                 {mrpEditId ? "Edit Sales MRP" : "Add / Update Sales MRP"}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-                {/* Brand No */}
+                {/* Brand No — searchable combobox */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Brand No</label>
-                  <select
-                    className="input-field"
-                    value={mrpBrandNumber}
-                    onChange={(e) => handleMrpBrandNumberChange(e.target.value)}
-                    data-testid="select-mrp-brand-number"
-                  >
-                    <option value="">-- Select --</option>
-                    {uniqueBrandNumbers.map(bn => (
-                      <option key={bn} value={bn}>{bn}</option>
-                    ))}
-                  </select>
+                  <Popover open={brandNoComboOpen} onOpenChange={setBrandNoComboOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        data-testid="select-mrp-brand-number"
+                        className="input-field flex items-center justify-between text-left"
+                        role="combobox"
+                        aria-expanded={brandNoComboOpen}
+                      >
+                        <span className={mrpBrandNumber ? "text-foreground" : "text-muted-foreground"}>
+                          {mrpBrandNumber || "-- Select --"}
+                        </span>
+                        <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search brand no..." />
+                        <CommandList>
+                          <CommandEmpty>No brand found.</CommandEmpty>
+                          <CommandGroup>
+                            {uniqueBrandNumbers.map(bn => (
+                              <CommandItem
+                                key={bn}
+                                value={bn}
+                                onSelect={(val) => {
+                                  handleMrpBrandNumberChange(val === mrpBrandNumber ? "" : val);
+                                  setBrandNoComboOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", mrpBrandNumber === bn ? "opacity-100" : "opacity-0")} />
+                                {bn}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 {/* Brand Name */}
