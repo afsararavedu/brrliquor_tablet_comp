@@ -1075,44 +1075,4 @@ async function seedDatabase() {
     });
   }
 
-  const sales = await storage.getDailySales();
-  if (sales.length === 0) {
-    // Seed with data from Figma screenshot
-    const seedData = [
-      {
-        brandNumber: "5029",
-        brandName: "KINGFISHER ULTRA LAGER BEER",
-        size: "650 ml",
-        quantityPerCase: 12,
-        openingBalanceBottles: 18,
-        newStockCases: 22,
-        newStockBottles: 18,
-        closingBalanceCases: 0,
-        closingBalanceBottles: 10,
-        mrp: "880",
-        totalSaleValue: "0",
-      },
-    ];
-    await storage.bulkUpdateDailySales(seedData);
-  }
-
-  const stock = await storage.getStockDetails();
-  if (stock.length === 0) {
-    const seedStock = [
-      {
-        brandNumber: "5029",
-        brandName: "KINGFISHER ULTRA LAGER BEER",
-        size: "650 ml",
-        quantityPerCase: 12,
-        stockInCases: 18,
-        stockInBottles: 11,
-        totalStockBottles: 245,
-        mrp: "350",
-        totalStockValue: "85750",
-        breakage: 1,
-        remarks: "",
-      },
-    ];
-    await storage.bulkUpdateStockDetails(seedStock);
-  }
 }
