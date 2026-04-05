@@ -566,9 +566,77 @@ export async function registerRoutes(
         });
       };
 
-      // If no daily_sales exist for this date yet, generate virtual rows from
-      // stock_details (master list) so the table is always pre-populated.
+      // If no daily_sales exist for this date yet, generate virtual rows.
+      // Priority: orders whose invoice_date matches the selected date → each distinct
+      // brand/size from those orders becomes one row with New Stk (Cs/Btls) filled in.
+      // Fallback (no matching orders): use stock_details as before.
       if (sales.length === 0) {
+        if (matchingOrders.length > 0) {
+          // Aggregate matching orders by brand+size into distinct rows
+          type OrderRowAgg = {
+            brandNumber: string;
+            brandName: string;
+            size: string;
+            cases: number;
+            bottles: number;
+          };
+          const orderRowMap = new Map<string, OrderRowAgg>();
+          for (const o of matchingOrders) {
+            const size = extractSizeFromPackSize(o.packSize);
+            const key = normKey2(o.brandNumber, size);
+            const existing = orderRowMap.get(key);
+            if (existing) {
+              existing.cases += o.qtyCasesDelivered ?? 0;
+              existing.bottles += o.qtyBottlesDelivered ?? 0;
+            } else {
+              orderRowMap.set(key, {
+                brandNumber: o.brandNumber,
+                brandName: o.brandName,
+                size,
+                cases: o.qtyCasesDelivered ?? 0,
+                bottles: o.qtyBottlesDelivered ?? 0,
+              });
+            }
+          }
+
+          const virtualRows = Array.from(orderRowMap.values()).map((ord, idx) => {
+            // Look up stock_details for quantityPerCase and MRP
+            const stockMatch = allStock.find((s) =>
+              normKey2(s.brandNumber, s.size) === normKey2(ord.brandNumber, ord.size)
+            );
+            const qtyPerCase = stockMatch?.quantityPerCase ?? 12;
+            const key4 = normKey4(ord.brandNumber, ord.brandName, ord.size, qtyPerCase);
+            const openingBalance = openingBalMapFull.get(key4) ?? 0;
+            const mrpOverride = findMrpOverride(ord.brandNumber, ord.size);
+            const mrpVal = mrpOverride ? mrpOverride.salesMrp : (stockMatch?.mrp || "0");
+            return {
+              id: -(idx + 1),
+              brandNumber: ord.brandNumber,
+              brandName: ord.brandName,
+              size: ord.size,
+              quantityPerCase: qtyPerCase,
+              openingBalanceBottles: openingBalance,
+              newStockCases: ord.cases,
+              newStockBottles: ord.bottles,
+              closingBalanceCases: 0,
+              closingBalanceBottles: 0,
+              soldBottles: 0,
+              mrp: mrpVal,
+              saleValue: "0",
+              totalSaleValue: "0",
+              breakageBottles: 0,
+              totalClosingStock: 0,
+              finalClosingBalance: "0",
+              saleDate: date,
+              invoiceDate: null,
+              isSubmitted: false,
+              createdAt: null,
+            };
+          });
+          return res.json(virtualRows);
+        }
+
+        // Fallback: no matching orders for this date → use stock_details
         if (allStock.length > 0) {
           const virtualRows = allStock.map((stock, idx) => {
             const key4 = normKey4(stock.brandNumber, stock.brandName ?? "", stock.size, stock.quantityPerCase ?? 0);
