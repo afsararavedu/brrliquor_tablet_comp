@@ -475,7 +475,7 @@ export class DatabaseStorage implements IStorage {
             saleValue: '0',
             breakageBottles: 0,
             totalClosingStock: 0,
-            finalClosingBalance: '0',
+            finalClosingBalance: 0,
             saleDate: today,
             invoiceDate: stock.invoiceDate ?? null,
           }).onConflictDoUpdate({

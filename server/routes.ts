@@ -626,7 +626,7 @@ export async function registerRoutes(
               totalSaleValue: "0",
               breakageBottles: 0,
               totalClosingStock: 0,
-              finalClosingBalance: "0",
+              finalClosingBalance: 0,
               saleDate: date,
               invoiceDate: null,
               isSubmitted: false,
@@ -665,7 +665,7 @@ export async function registerRoutes(
               totalSaleValue: "0",
               breakageBottles: 0,
               totalClosingStock: 0,
-              finalClosingBalance: "0",
+              finalClosingBalance: 0,
               saleDate: date,
               invoiceDate: stock.invoiceDate ?? null,
               isSubmitted: false,
@@ -925,7 +925,7 @@ export async function registerRoutes(
       // Opening Balance Value = sum of D-1's finalClosingBalance
       // Simple rule: if D-1 has saved sales, use their closing balance; else 0
       const openingBalanceValue = prevSales.reduce(
-        (acc, s) => acc + (parseFloat(s.finalClosingBalance as string) || 0),
+        (acc, s) => acc + ((s.finalClosingBalance as number) || 0),
         0
       );
 

@@ -129,7 +129,7 @@ export default function Sales() {
     // Opening Balance Value = sum of D-1's finalClosingBalance
     // Simple rule: if D-1 has saved sales use their closing balance; else 0
     const openingBalanceValue = (prevDaySales || []).reduce(
-      (acc, s) => acc + (parseFloat(s.finalClosingBalance as string) || 0),
+      (acc, s) => acc + ((s.finalClosingBalance as number) || 0),
       0
     );
 
@@ -285,7 +285,7 @@ export default function Sales() {
         const breakage = s.breakageBottles ?? 0;
         return {
           ...s,
-          finalClosingBalance: (totalClosingStock - breakage).toFixed(2),
+          finalClosingBalance: Math.round(totalClosingStock - breakage),
         };
       });
       setLocalSales(recalculated);
@@ -326,7 +326,7 @@ export default function Sales() {
 
           const saleValue = soldBottles * mrp;
           const totalClosingStock = closingTotal;
-          const finalClosingBalance = totalClosingStock - breakage;
+          const finalClosingBalance = Math.round(totalClosingStock - breakage);
 
           return {
             ...updatedItem,
@@ -334,7 +334,7 @@ export default function Sales() {
             saleValue: saleValue.toFixed(2),
             totalSaleValue: saleValue.toFixed(2),
             totalClosingStock,
-            finalClosingBalance: finalClosingBalance.toFixed(2),
+            finalClosingBalance,
           };
         }
         return item;
@@ -724,7 +724,7 @@ export default function Sales() {
                 <th className="table-header w-20 text-right font-bold text-primary border-r border-border">Sale Value</th>
                 <th className="table-header w-16 text-center border-r border-border">Tot Cls Stk</th>
                 <th className="table-header w-14 text-center border-r border-border">Breakage</th>
-                <th className="table-header w-20 text-center">Final Cls Bal</th>
+                <th className="table-header w-20 text-center">Final Cls Stk Bal</th>
               </tr>
             </thead>
             <tbody>
@@ -842,7 +842,7 @@ export default function Sales() {
                         )}
                       </td>
                       <td className="table-cell text-center font-mono">
-                        {parseFloat(item.finalClosingBalance as string || '0').toFixed(2)}
+                        {Math.round(Number(item.finalClosingBalance) || 0)}
                       </td>
                     </tr>
                   );
