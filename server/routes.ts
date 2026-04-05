@@ -899,6 +899,16 @@ export async function registerRoutes(
     }
   });
 
+  // Returns the latest distinct invoice_date from the orders table (YYYY-MM-DD)
+  app.get("/api/orders/latest-invoice-date", async (_req, res) => {
+    try {
+      const date = await storage.getLatestOrderInvoiceDate();
+      res.json({ invoiceDate: date });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch latest order invoice date" });
+    }
+  });
+
   app.get("/api/sales/summary", async (req, res) => {
     try {
       const date = (req.query.date as string) || new Date().toISOString().split("T")[0];

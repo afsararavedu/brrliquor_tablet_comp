@@ -46,6 +46,7 @@ export default function Sales() {
   const [exportDate, setExportDate] = useState<string>(getTodayLocal());
   const [exportDatePickerOpen, setExportDatePickerOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [autoDateApplied, setAutoDateApplied] = useState(false);
 
   const { data: sales, isLoading } = useSales(selectedDate);
   const { mutate: updateSales, isPending: isSaving } = useBulkUpdateSales();
@@ -104,6 +105,24 @@ export default function Sales() {
   const earliestInvoiceDate = earliestInvoiceDateData?.invoiceDate
     ? parse(earliestInvoiceDateData.invoiceDate, "yyyy-MM-dd", new Date())
     : null;
+
+  // Latest order invoice date — used to auto-default the date picker
+  const { data: latestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
+    queryKey: ["/api/orders/latest-invoice-date"],
+  });
+
+  // Auto-switch to the latest order invoice date if today has no data
+  useEffect(() => {
+    if (autoDateApplied) return;
+    if (isLoading) return;
+    const today = getTodayLocal();
+    if (selectedDate !== today) return; // user already changed date manually
+    const latestDate = latestOrderDateData?.invoiceDate;
+    if (latestDate && latestDate !== today && (!sales || sales.length === 0)) {
+      setSelectedDate(latestDate);
+      setAutoDateApplied(true);
+    }
+  }, [isLoading, sales, latestOrderDateData, selectedDate, autoDateApplied]);
 
   // Compute summary client-side from localSales so it updates in real-time
   const summary = useMemo<SalesSummary>(() => {
