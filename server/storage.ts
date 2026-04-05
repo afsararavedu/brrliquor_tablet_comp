@@ -504,7 +504,8 @@ export class DatabaseStorage implements IStorage {
     // Sync any date's saved sales to stock_details.
     // Logic: DECREASE stock_in_cases and stock_in_bottles by the daily_sales closing
     // balance values (closing_balance_cases / closing_balance_bottles).
-    // Matching criteria: brand_number + brand_name + size + quantity_per_case
+    // Also updates MRP from daily_sales.
+    // Matching criteria: brand_number + brand_name + size (qty_per_case optional fallback)
     const targetDate = date || new Date().toISOString().split('T')[0];
 
     // Select ALL sales for this date (submitted or not — the route handles auth)
@@ -512,25 +513,43 @@ export class DatabaseStorage implements IStorage {
       .where(eq(dailySales.saleDate, targetDate));
     const allStock = await db.select().from(stockDetails);
 
+    console.log(`[syncDailySalesToStock] date=${targetDate} sales=${dateSales.length} stock=${allStock.length}`);
+
     if (dateSales.length === 0 || allStock.length === 0) {
+      console.log(`[syncDailySalesToStock] Skipping: no ${dateSales.length === 0 ? 'sales' : 'stock'} rows for ${targetDate}`);
       return { updatedStockCount: 0 };
     }
 
-    const normStr = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "");
+    const normStr = (s: string) => (s ?? '').trim().toLowerCase().replace(/\s+/g, "");
 
     let updatedStockCount = 0;
 
     for (const stock of allStock) {
-      const matchedSale = dateSales.find(sale => {
+      // Primary match: brand_number + brand_name + size + qty_per_case
+      let matchedSale = dateSales.find(sale => {
         if (sale.brandNumber !== stock.brandNumber) return false;
         if (normStr(sale.brandName) !== normStr(stock.brandName)) return false;
         const saleSize = normStr(sale.size);
-        const stockSize = normStr(stock.size);
+        const stockSize = normStr(stock.size ?? '');
         if (stockSize !== saleSize && !stockSize.includes(saleSize) && !saleSize.includes(stockSize)) return false;
-        // Also match quantity per case
         if ((sale.quantityPerCase ?? 0) !== (stock.quantityPerCase ?? 0)) return false;
         return true;
       });
+
+      // Fallback match: brand_number + brand_name + size (ignore qty_per_case)
+      if (!matchedSale) {
+        matchedSale = dateSales.find(sale => {
+          if (sale.brandNumber !== stock.brandNumber) return false;
+          if (normStr(sale.brandName) !== normStr(stock.brandName)) return false;
+          const saleSize = normStr(sale.size);
+          const stockSize = normStr(stock.size ?? '');
+          if (stockSize !== saleSize && !stockSize.includes(saleSize) && !saleSize.includes(stockSize)) return false;
+          return true;
+        });
+        if (matchedSale) {
+          console.log(`[syncDailySalesToStock] Fallback match (no qty): ${stock.brandNumber} ${stock.brandName} ${stock.size}`);
+        }
+      }
 
       if (matchedSale) {
         const closingCases = matchedSale.closingBalanceCases ?? 0;
@@ -539,10 +558,13 @@ export class DatabaseStorage implements IStorage {
         // Decrease stock by the closing balance values (cannot go below 0)
         const newStockInCases = Math.max(0, (stock.stockInCases ?? 0) - closingCases);
         const newStockInBottles = Math.max(0, (stock.stockInBottles ?? 0) - closingBottles);
-        const qtyPerCase = stock.quantityPerCase ?? 1;
+        const qtyPerCase = stock.quantityPerCase ?? matchedSale.quantityPerCase ?? 1;
         const newTotalBottles = newStockInCases * qtyPerCase + newStockInBottles;
-        const mrpVal = parseFloat(String(stock.mrp ?? '0')) || 0;
-        const newTotalValue = newTotalBottles * mrpVal;
+        // Use MRP from daily_sales (which may include sales_mrp override); fall back to existing stock MRP
+        const saleMrp = parseFloat(String(matchedSale.mrp ?? '0')) || 0;
+        const stockMrp = parseFloat(String(stock.mrp ?? '0')) || 0;
+        const newMrp = saleMrp > 0 ? saleMrp : stockMrp;
+        const newTotalValue = newTotalBottles * newMrp;
 
         await db.update(stockDetails)
           .set({
@@ -550,13 +572,18 @@ export class DatabaseStorage implements IStorage {
             stockInBottles: newStockInBottles,
             totalStockBottles: newTotalBottles,
             totalStockValue: newTotalValue.toFixed(2),
+            mrp: newMrp.toString(),
           })
           .where(eq(stockDetails.id, stock.id));
 
+        console.log(`[syncDailySalesToStock] Updated: ${stock.brandNumber} ${stock.size} => cases=${newStockInCases} btls=${newStockInBottles} mrp=${newMrp}`);
         updatedStockCount++;
+      } else {
+        console.log(`[syncDailySalesToStock] No match for stock id=${stock.id} brandNo=${stock.brandNumber} name="${stock.brandName}" size="${stock.size}"`);
       }
     }
 
+    console.log(`[syncDailySalesToStock] Done. Updated ${updatedStockCount}/${allStock.length} stock rows`);
     return { updatedStockCount };
   }
 
