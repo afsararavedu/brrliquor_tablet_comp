@@ -823,25 +823,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.stock.sync.path, async (req, res) => {
-    try {
-      const syncResult = await storage.syncOrdersToStock();
-      console.log(
-        `Stock sync: ${syncResult.updatedStockCount} stock items updated from ${syncResult.syncedOrderIds.length} orders`,
-      );
-
-      const salesSync = await storage.syncStockToDailySales();
-      console.log(
-        `Sales sync: ${salesSync.updatedSalesCount} updated, ${salesSync.createdSalesCount} created in daily sales from stock`,
-      );
-
-      res.json(syncResult);
-    } catch (err: any) {
-      res
-        .status(500)
-        .json({ message: "Failed to sync orders to stock: " + err.message });
-    }
-  });
 
   app.get("/api/sales/earliest-invoice-date", async (_req, res) => {
     try {
