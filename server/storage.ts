@@ -41,6 +41,7 @@ export interface IStorage {
 
   // Stock
   getStockDetails(): Promise<StockDetail[]>;
+  populateStockFromLatestSnapshot(): Promise<void>;
   bulkUpdateStockDetails(stock: InsertStockDetail[]): Promise<StockDetail[]>;
   syncOrdersToStock(): Promise<{ syncedOrderIds: number[]; updatedStockCount: number }>;
   syncStockToDailySales(): Promise<{ updatedSalesCount: number; createdSalesCount: number }>;
@@ -246,7 +247,39 @@ export class DatabaseStorage implements IStorage {
 
   // Stock
   async getStockDetails(): Promise<StockDetail[]> {
-    return await db.select().from(stockDetails);
+    const existing = await db.select().from(stockDetails);
+    if (existing.length === 0) {
+      // Auto-populate from the most recent daily_stock snapshot
+      await this.populateStockFromLatestSnapshot();
+      return await db.select().from(stockDetails);
+    }
+    return existing;
+  }
+
+  async populateStockFromLatestSnapshot(): Promise<void> {
+    const latestRows = await db
+      .select()
+      .from(dailyStock)
+      .orderBy(desc(dailyStock.date))
+      .limit(500);
+    if (latestRows.length === 0) return;
+    const mostRecentDate = latestRows[0].date;
+    const recentRows = latestRows.filter((r) => r.date === mostRecentDate);
+    for (const row of recentRows) {
+      await db.insert(stockDetails).values({
+        brandNumber: row.brandNumber,
+        brandName: row.brandName,
+        size: row.size,
+        quantityPerCase: row.quantityPerCase,
+        stockInCases: row.stockInCases ?? 0,
+        stockInBottles: row.stockInBottles ?? 0,
+        totalStockBottles: row.totalStockBottles ?? 0,
+        mrp: row.mrp || '0',
+        totalStockValue: row.totalStockValue || '0',
+        breakage: row.breakage ?? 0,
+      });
+    }
+    console.log(`[populateStockFromLatestSnapshot] Inserted ${recentRows.length} rows from daily_stock date=${mostRecentDate}`);
   }
 
   async bulkUpdateStockDetails(stockData: InsertStockDetail[]): Promise<StockDetail[]> {
@@ -501,89 +534,85 @@ export class DatabaseStorage implements IStorage {
   }
 
   async syncDailySalesToStock(date?: string): Promise<{ updatedStockCount: number }> {
-    // Sync any date's saved sales to stock_details.
-    // Logic: DECREASE stock_in_cases and stock_in_bottles by the daily_sales closing
-    // balance values (closing_balance_cases / closing_balance_bottles).
-    // Also updates MRP from daily_sales.
-    // Matching criteria: brand_number + brand_name + size (qty_per_case optional fallback)
+    // Sync any date's saved daily_sales to stock_details.
+    // Logic: SET stock values to closing-stock values from daily_sales (upsert).
+    //   - If a matching stock_details row exists → UPDATE (SET, not decrease)
+    //   - If no match → INSERT a new stock_details row
+    // This keeps stock_details up to date with the most recently saved sales.
     const targetDate = date || new Date().toISOString().split('T')[0];
 
-    // Select ALL sales for this date (submitted or not — the route handles auth)
-    const dateSales = await db.select().from(dailySales)
-      .where(eq(dailySales.saleDate, targetDate));
-    const allStock = await db.select().from(stockDetails);
-
-    console.log(`[syncDailySalesToStock] date=${targetDate} sales=${dateSales.length} stock=${allStock.length}`);
-
-    if (dateSales.length === 0 || allStock.length === 0) {
-      console.log(`[syncDailySalesToStock] Skipping: no ${dateSales.length === 0 ? 'sales' : 'stock'} rows for ${targetDate}`);
+    const dateSales = await db.select().from(dailySales).where(eq(dailySales.saleDate, targetDate));
+    if (dateSales.length === 0) {
+      console.log(`[syncDailySalesToStock] No sales for ${targetDate}, skipping`);
       return { updatedStockCount: 0 };
     }
 
+    const allStock = await db.select().from(stockDetails);
+    console.log(`[syncDailySalesToStock] date=${targetDate} sales=${dateSales.length} stockRows=${allStock.length}`);
+
     const normStr = (s: string) => (s ?? '').trim().toLowerCase().replace(/\s+/g, "");
+    const sizeMatch = (a: string, b: string) => {
+      const na = normStr(a), nb = normStr(b);
+      return na === nb || na.includes(nb) || nb.includes(na);
+    };
 
     let updatedStockCount = 0;
 
-    for (const stock of allStock) {
+    for (const sale of dateSales) {
       // Primary match: brand_number + brand_name + size + qty_per_case
-      let matchedSale = dateSales.find(sale => {
-        if (sale.brandNumber !== stock.brandNumber) return false;
-        if (normStr(sale.brandName) !== normStr(stock.brandName)) return false;
-        const saleSize = normStr(sale.size);
-        const stockSize = normStr(stock.size ?? '');
-        if (stockSize !== saleSize && !stockSize.includes(saleSize) && !saleSize.includes(stockSize)) return false;
-        if ((sale.quantityPerCase ?? 0) !== (stock.quantityPerCase ?? 0)) return false;
-        return true;
-      });
+      let matchedStock = allStock.find(stock =>
+        sale.brandNumber === stock.brandNumber &&
+        normStr(sale.brandName) === normStr(stock.brandName) &&
+        sizeMatch(sale.size, stock.size ?? '') &&
+        (sale.quantityPerCase ?? 0) === (stock.quantityPerCase ?? 0)
+      );
 
-      // Fallback match: brand_number + brand_name + size (ignore qty_per_case)
-      if (!matchedSale) {
-        matchedSale = dateSales.find(sale => {
-          if (sale.brandNumber !== stock.brandNumber) return false;
-          if (normStr(sale.brandName) !== normStr(stock.brandName)) return false;
-          const saleSize = normStr(sale.size);
-          const stockSize = normStr(stock.size ?? '');
-          if (stockSize !== saleSize && !stockSize.includes(saleSize) && !saleSize.includes(stockSize)) return false;
-          return true;
-        });
-        if (matchedSale) {
-          console.log(`[syncDailySalesToStock] Fallback match (no qty): ${stock.brandNumber} ${stock.brandName} ${stock.size}`);
-        }
+      // Fallback: brand_number + brand_name + size
+      if (!matchedStock) {
+        matchedStock = allStock.find(stock =>
+          sale.brandNumber === stock.brandNumber &&
+          normStr(sale.brandName) === normStr(stock.brandName) &&
+          sizeMatch(sale.size, stock.size ?? '')
+        );
       }
 
-      if (matchedSale) {
-        const closingCases = matchedSale.closingBalanceCases ?? 0;
-        const closingBottles = matchedSale.closingBalanceBottles ?? 0;
+      const saleMrp = parseFloat(String(sale.mrp ?? '0')) || 0;
+      const totalBottles = sale.totalClosingStock ?? 0;
+      const totalValue = totalBottles * saleMrp;
 
-        // Decrease stock by the closing balance values (cannot go below 0)
-        const newStockInCases = Math.max(0, (stock.stockInCases ?? 0) - closingCases);
-        const newStockInBottles = Math.max(0, (stock.stockInBottles ?? 0) - closingBottles);
-        const qtyPerCase = stock.quantityPerCase ?? matchedSale.quantityPerCase ?? 1;
-        const newTotalBottles = newStockInCases * qtyPerCase + newStockInBottles;
-        // Use MRP from daily_sales (which may include sales_mrp override); fall back to existing stock MRP
-        const saleMrp = parseFloat(String(matchedSale.mrp ?? '0')) || 0;
-        const stockMrp = parseFloat(String(stock.mrp ?? '0')) || 0;
-        const newMrp = saleMrp > 0 ? saleMrp : stockMrp;
-        const newTotalValue = newTotalBottles * newMrp;
-
+      if (matchedStock) {
+        // SET closing-stock values (never decrease below what's saved)
+        const existingMrp = parseFloat(String(matchedStock.mrp ?? '0')) || 0;
+        const newMrp = saleMrp > 0 ? saleMrp : existingMrp;
         await db.update(stockDetails)
           .set({
-            stockInCases: newStockInCases,
-            stockInBottles: newStockInBottles,
-            totalStockBottles: newTotalBottles,
-            totalStockValue: newTotalValue.toFixed(2),
+            stockInCases: sale.closingBalanceCases ?? 0,
+            stockInBottles: sale.closingBalanceBottles ?? 0,
+            totalStockBottles: totalBottles,
+            totalStockValue: (totalBottles * newMrp).toFixed(2),
             mrp: newMrp.toString(),
           })
-          .where(eq(stockDetails.id, stock.id));
-
-        console.log(`[syncDailySalesToStock] Updated: ${stock.brandNumber} ${stock.size} => cases=${newStockInCases} btls=${newStockInBottles} mrp=${newMrp}`);
-        updatedStockCount++;
+          .where(eq(stockDetails.id, matchedStock.id));
+        console.log(`[syncDailySalesToStock] Updated: ${sale.brandNumber} ${sale.size} totBtls=${totalBottles}`);
       } else {
-        console.log(`[syncDailySalesToStock] No match for stock id=${stock.id} brandNo=${stock.brandNumber} name="${stock.brandName}" size="${stock.size}"`);
+        // INSERT new stock_details row from this sale
+        await db.insert(stockDetails).values({
+          brandNumber: sale.brandNumber,
+          brandName: sale.brandName,
+          size: sale.size,
+          quantityPerCase: sale.quantityPerCase ?? 12,
+          stockInCases: sale.closingBalanceCases ?? 0,
+          stockInBottles: sale.closingBalanceBottles ?? 0,
+          totalStockBottles: totalBottles,
+          mrp: saleMrp > 0 ? saleMrp.toString() : '0',
+          totalStockValue: totalValue.toFixed(2),
+        });
+        console.log(`[syncDailySalesToStock] Inserted: ${sale.brandNumber} ${sale.size} totBtls=${totalBottles}`);
       }
+      updatedStockCount++;
     }
 
-    console.log(`[syncDailySalesToStock] Done. Updated ${updatedStockCount}/${allStock.length} stock rows`);
+    console.log(`[syncDailySalesToStock] Done. Upserted ${updatedStockCount} stock rows`);
     return { updatedStockCount };
   }
 
