@@ -30,16 +30,6 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
-    syncFromStock: {
-      method: 'POST' as const,
-      path: '/api/sales/sync-from-stock',
-      responses: {
-        200: z.object({
-          updatedSalesCount: z.number(),
-          createdSalesCount: z.number(),
-        }),
-      },
-    },
     submit: {
       method: 'POST' as const,
       path: '/api/sales/submit',
