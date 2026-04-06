@@ -10,7 +10,7 @@ import {
   TrendingUp, TrendingDown, ShoppingCart, Package, Calendar,
   BarChart2, Award, Loader2, AlertCircle, CheckCircle2,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,7 +83,12 @@ const fmt = (n: number | string | null | undefined) =>
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return "—";
-  try { return format(parseISO(d), "dd-MMM-yyyy"); } catch { return d; }
+  try {
+    // Parse as local midnight — parseISO/new Date("YYYY-MM-DD") use UTC which
+    // shifts the displayed date by -1 day for users behind UTC (e.g. US timezones).
+    const [y, mo, da] = d.substring(0, 10).split("-").map(Number);
+    return format(new Date(y, mo - 1, da), "dd-MMM-yyyy");
+  } catch { return d; }
 };
 
 const BRAND_COLORS = [

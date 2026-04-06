@@ -40,6 +40,21 @@ function getTodayLocal(): string {
   return `${y}-${m}-${d}`;
 }
 
+// Parses a "YYYY-MM-DD" string as LOCAL midnight (not UTC).
+// new Date("YYYY-MM-DD") is UTC midnight — wrong in any timezone behind UTC.
+function parseDateLocal(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// Formats a local Date back to "YYYY-MM-DD" string.
+function formatDateLocal(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export default function Sales() {
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocal());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -84,9 +99,9 @@ export default function Sales() {
 
   // Previous day's saved sales — used to calculate Opening Balance Value
   const prevDateStr = useMemo(() => {
-    const d = new Date(selectedDate);
+    const d = parseDateLocal(selectedDate);
     d.setDate(d.getDate() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return formatDateLocal(d);
   }, [selectedDate]);
 
   const { data: prevDaySales } = useQuery<DailySale[]>({
@@ -459,9 +474,9 @@ export default function Sales() {
           <button
             data-testid="button-prev-date"
             onClick={() => {
-              const d = new Date(selectedDate);
+              const d = parseDateLocal(selectedDate);
               d.setDate(d.getDate() - 1);
-              const prev = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              const prev = formatDateLocal(d);
               if (prev >= latestOrderDateStr) setSelectedDate(prev);
             }}
             disabled={selectedDate <= latestOrderDateStr}
@@ -520,10 +535,10 @@ export default function Sales() {
           <button
             data-testid="button-next-date"
             onClick={() => {
-              const d = new Date(selectedDate);
+              const d = parseDateLocal(selectedDate);
               d.setDate(d.getDate() + 1);
-              const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-              const today = format(new Date(), "yyyy-MM-dd");
+              const next = formatDateLocal(d);
+              const today = getTodayLocal();
               if (next <= today) setSelectedDate(next);
             }}
             disabled={selectedDate >= format(new Date(), "yyyy-MM-dd")}
