@@ -305,11 +305,13 @@ async function parsePdfInvoice(
   
 
   const parsedOrders: (typeof EMPTY_ORDER)[] = [];
+  const skippedLines: string[] = [];
   let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
-    const slNoMatch = line.match(/^(\d+)\s+(\d{3,5})\s+(.+)/);
+    // Accept brand numbers with 2–6 digits (e.g. "19" for MCDOWELLS, up to "123456")
+    const slNoMatch = line.match(/^(\d{1,4})\s+(\d{2,6})\s+(.+)/);
     if (!slNoMatch) {
       i++;
       continue;
@@ -321,7 +323,7 @@ async function parsePdfInvoice(
     i++;
     while (
       i < lines.length &&
-      !lines[i].match(/^\d+\s+\d{3,5}\s+/) &&
+      !lines[i].match(/^\d{1,4}\s+\d{2,6}\s+/) &&
       !lines[i].match(
         /^(Duplicate|Original|Total|Grand|Sub|Breakage|Particulars|Sl\.No)/i,
       )
@@ -330,8 +332,11 @@ async function parsePdfInvoice(
       i++;
     }
 
-    const sizeMatch = rest.match(/(\d+\s*\/\s*\d+\s*ml)/i);
-    if (!sizeMatch) continue;
+    const sizeMatch = rest.match(/(\d+\s*\/\s*\d+\s*(?:ml|ltr?|litre?s?))/i);
+    if (!sizeMatch) {
+      skippedLines.push(`brandNo=${brandNumber} rest="${rest.substring(0, 80)}"`);
+      continue;
+    }
 
     const packSize = sizeMatch[1].replace(/\s+/g, " ").trim();
     const beforeSize = rest.substring(0, rest.indexOf(sizeMatch[0])).trim();
@@ -402,6 +407,11 @@ async function parsePdfInvoice(
     throw new Error(
       "Could not extract any order data from the PDF. Please ensure it follows the invoice format.",
     );
+  }
+
+  console.log(`[PDF parser] Parsed ${parsedOrders.length} rows.${skippedLines.length > 0 ? ` Skipped ${skippedLines.length} rows (no size pattern found):` : " No rows skipped."}`);
+  if (skippedLines.length > 0) {
+    skippedLines.forEach(s => console.log("  SKIPPED:", s));
   }
 
   return { orders: parsedOrders, shopDetail: hasShopData ? shopDetail : null };
