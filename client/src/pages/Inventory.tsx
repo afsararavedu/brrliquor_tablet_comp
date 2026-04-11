@@ -312,6 +312,18 @@ export default function Inventory() {
     }
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    if (data.skippedCount && data.skippedCount > 0) {
+      const details = (data.skippedLines as string[])
+        .map(l => l.replace(/^brandNo=/, "Brand ").replace(/ rest=".+$/, ""))
+        .join(", ");
+      toast({
+        title: `⚠️ ${data.skippedCount} row(s) skipped during parsing`,
+        description: `These rows had an unrecognised size/pack format and were NOT imported: ${details}. Please add them manually.`,
+        variant: "destructive",
+        duration: 12000,
+      });
+    }
   };
 
   const handleUpload = () => {

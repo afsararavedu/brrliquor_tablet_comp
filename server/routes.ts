@@ -332,13 +332,18 @@ async function parsePdfInvoice(
       i++;
     }
 
-    const sizeMatch = rest.match(/(\d+\s*\/\s*\d+\s*(?:ml|ltr?|litre?s?))/i);
+    // Primary: "24 / 180 ml" or "24 x 180 ml" or "24×180ml" with optional decimals
+    const sizeMatch =
+      rest.match(/(\d+\.?\d*\s*[\/x×]\s*\d+\.?\d*\s*(?:ml|ltrs?|ltr?|litre?s?))/i) ||
+      // Fallback: just a size like "750 ml" with no qty/case separator
+      rest.match(/(\d+\.?\d*\s*(?:ml|ltrs?|ltr?|litre?s?))/i);
     if (!sizeMatch) {
-      skippedLines.push(`brandNo=${brandNumber} rest="${rest.substring(0, 80)}"`);
+      skippedLines.push(`brandNo=${brandNumber} rest="${rest.substring(0, 120)}"`);
       continue;
     }
 
-    const packSize = sizeMatch[1].replace(/\s+/g, " ").trim();
+    // Normalise the separator so downstream code always sees "qty / size ml"
+    const packSize = sizeMatch[1].replace(/\s+/g, " ").replace(/\s*[x×]\s*/i, " / ").trim();
     const beforeSize = rest.substring(0, rest.indexOf(sizeMatch[0])).trim();
     const afterSize = rest
       .substring(rest.indexOf(sizeMatch[0]) + sizeMatch[0].length)
@@ -409,19 +414,19 @@ async function parsePdfInvoice(
     );
   }
 
-  console.log(`[PDF parser] Parsed ${parsedOrders.length} rows.${skippedLines.length > 0 ? ` Skipped ${skippedLines.length} rows (no size pattern found):` : " No rows skipped."}`);
+  console.log(`[PDF parser] Parsed ${parsedOrders.length} rows.${skippedLines.length > 0 ? ` Skipped ${skippedLines.length} rows:` : " No rows skipped."}`);
   if (skippedLines.length > 0) {
     skippedLines.forEach(s => console.log("  SKIPPED:", s));
   }
 
-  return { orders: parsedOrders, shopDetail: hasShopData ? shopDetail : null };
+  return { orders: parsedOrders, shopDetail: hasShopData ? shopDetail : null, skippedLines };
 }
 
-async function parseUploadedFile(buffer: Buffer, filename: string): Promise<{ orders: (typeof EMPTY_ORDER)[]; shopDetail: Record<string, string> | null }> {
+async function parseUploadedFile(buffer: Buffer, filename: string): Promise<{ orders: (typeof EMPTY_ORDER)[]; shopDetail: Record<string, string> | null; skippedLines?: string[] }> {
   const ext = filename.toLowerCase().split(".").pop() || "";
 
   if (ext === "csv" || ext === "xls" || ext === "xlsx") {
-    return { orders: parseSpreadsheet(buffer, filename), shopDetail: null };
+    return { orders: parseSpreadsheet(buffer, filename), shopDetail: null, skippedLines: [] };
   } else if (ext === "pdf") {
     return parsePdfInvoice(buffer);
   } else {
@@ -1156,12 +1161,18 @@ export async function registerRoutes(
         }
       }
 
+      const skipped = result.skippedLines ?? [];
+      const skippedMsg = skipped.length > 0
+        ? ` Warning: ${skipped.length} row(s) could not be parsed (unrecognised size format): ${skipped.join(" | ")}`
+        : "";
       res.json({
-        message: `Successfully parsed ${result.orders.length} orders from file. Please review and confirm before saving.`,
+        message: `Successfully parsed ${result.orders.length} order(s) from "${req.file.originalname}".${skippedMsg} Please review and confirm before saving.`,
         filename: req.file.originalname,
         orders: result.orders,
         ordersCount: result.orders.length,
         shopDetail: result.shopDetail,
+        skippedCount: skipped.length,
+        skippedLines: skipped,
       });
     } catch (err: any) {
       res.status(500).json({ message: "Failed to parse file: " + err.message });
