@@ -309,7 +309,9 @@ async function parsePdfInvoice(
   let i = 0;
 
   while (i < lines.length) {
-    const line = lines[i];
+    // Trim leading/trailing whitespace — PDF column alignment often adds leading spaces
+    // which would otherwise break the start-of-line (^) anchor in both regexes.
+    const line = lines[i].trim();
     // Accept brand numbers with 2–6 digits (e.g. "19" for MCDOWELLS, up to "123456")
     const slNoMatch = line.match(/^(\d{1,4})\s+(\d{2,6})\s+(.+)/);
     if (!slNoMatch) {
@@ -323,12 +325,12 @@ async function parsePdfInvoice(
     i++;
     while (
       i < lines.length &&
-      !lines[i].match(/^\d{1,4}\s+\d{2,6}\s+/) &&
-      !lines[i].match(
-        /^(Duplicate|Original|Total|Grand|Sub|Breakage|Particulars|Sl\.No)/i,
+      !lines[i].trim().match(/^\d{1,4}\s+\d{2,6}\s+/) &&
+      !lines[i].trim().match(
+        /^(Duplicate|Original|Total|Grand|Sub|Breakage|Particulars|Sl\.No|Invoice\s*Value|Net\s*Invoice|Amount\s*in\s*Words)/i,
       )
     ) {
-      rest += " " + lines[i];
+      rest += " " + lines[i].trim();
       i++;
     }
 
