@@ -809,7 +809,7 @@ export async function registerRoutes(
       if (parseFloat(salesMrp) < 0) {
         return res.status(400).json({ message: "salesMrp must not be less than 0" });
       }
-      const result = await storage.upsertSalesMrpDetail({ brandNumber, brandName, size, productType, salesMrp: String(salesMrp) });
+      const result = await storage.upsertSalesMrpDetail({ brandNumber: padBrandNumber(brandNumber), brandName, size, productType, salesMrp: String(salesMrp) });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
