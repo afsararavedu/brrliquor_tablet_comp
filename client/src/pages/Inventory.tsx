@@ -129,6 +129,11 @@ export default function Inventory() {
   const [mrpValue, setMrpValue] = useState<number | "">("");
   const [mrpEditId, setMrpEditId] = useState<number | null>(null);
 
+  // MRP Bulk Upload State
+  const mrpFileInputRef = useRef<HTMLInputElement>(null);
+  const [mrpUploadFile, setMrpUploadFile] = useState<File | null>(null);
+  const [isMrpUploading, setIsMrpUploading] = useState(false);
+
   // All orders (without filters) for MRP dropdowns
   const { data: allOrdersForMrp } = useQuery<Order[]>({
     queryKey: ["/api/orders/all-for-mrp"],
@@ -235,6 +240,26 @@ export default function Inventory() {
       productType: mrpProductType,
       salesMrp: String(mrpValue),
     });
+  };
+
+  const handleMrpBulkUpload = async () => {
+    if (!mrpUploadFile) return;
+    setIsMrpUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", mrpUploadFile);
+      const res = await fetch("/api/sales-mrp/bulk-upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Upload failed");
+      toast({ title: "Import Successful", description: data.message, className: "bg-green-50 text-green-800" });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales-mrp"] });
+      setMrpUploadFile(null);
+      if (mrpFileInputRef.current) mrpFileInputRef.current.value = "";
+    } catch (err: any) {
+      toast({ title: "Import Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsMrpUploading(false);
+    }
   };
 
   const handleViewShopDetail = (icdcNum: string) => {
@@ -790,6 +815,59 @@ export default function Inventory() {
         <TabsContent value="update-mrp" className="space-y-8">
           <section>
             <h2 className="text-xl font-bold font-display mb-6 text-foreground">Update Sales MRP</h2>
+
+            {/* Excel Bulk Upload Card */}
+            <div className="bg-card rounded-2xl border border-border shadow-sm p-6 mb-6">
+              <h3 className="text-base font-semibold text-foreground mb-1 flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-primary" />
+                Import Sales MRP from Excel
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Upload an <strong>.xls / .xlsx</strong> file with columns: <code className="bg-muted px-1 py-0.5 rounded text-xs">brand_number, brand_name, size, sales_mrp, product_type</code>. Existing records will be updated.
+              </p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <label
+                  htmlFor="mrp-file-upload"
+                  className="flex items-center gap-2 px-4 py-2 border border-dashed border-border rounded-xl cursor-pointer hover:bg-muted/40 transition-colors text-sm text-muted-foreground"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  {mrpUploadFile ? (
+                    <span className="text-foreground font-medium">{mrpUploadFile.name}</span>
+                  ) : (
+                    <span>Choose file…</span>
+                  )}
+                  <input
+                    id="mrp-file-upload"
+                    ref={mrpFileInputRef}
+                    type="file"
+                    accept=".xls,.xlsx,.csv"
+                    className="hidden"
+                    onChange={(e) => setMrpUploadFile(e.target.files?.[0] ?? null)}
+                    data-testid="input-mrp-file-upload"
+                  />
+                </label>
+                {mrpUploadFile && (
+                  <>
+                    <button
+                      onClick={handleMrpBulkUpload}
+                      disabled={isMrpUploading}
+                      data-testid="button-mrp-upload-import"
+                      className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-xl font-medium shadow hover:bg-primary/90 transition-all disabled:opacity-50"
+                    >
+                      {isMrpUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      {isMrpUploading ? "Importing…" : "Import & Save"}
+                    </button>
+                    <button
+                      onClick={() => { setMrpUploadFile(null); if (mrpFileInputRef.current) mrpFileInputRef.current.value = ""; }}
+                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                      title="Clear"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
 
             {/* Form Card */}
             <div className="bg-card rounded-2xl border border-border shadow-sm p-6 mb-8">

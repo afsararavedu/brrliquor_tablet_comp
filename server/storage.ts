@@ -55,6 +55,7 @@ export interface IStorage {
   // Sales MRP Overrides
   getSalesMrpDetails(): Promise<SalesMrpDetail[]>;
   upsertSalesMrpDetail(data: InsertSalesMrpDetail): Promise<SalesMrpDetail>;
+  bulkUpsertSalesMrpDetails(data: InsertSalesMrpDetail[]): Promise<number>;
 
   // Shop Details
   createShopDetail(shop: InsertShopDetail): Promise<ShopDetail>;
@@ -699,6 +700,18 @@ export class DatabaseStorage implements IStorage {
       },
     }).returning();
     return result;
+  }
+
+  async bulkUpsertSalesMrpDetails(data: InsertSalesMrpDetail[]): Promise<number> {
+    if (data.length === 0) return 0;
+    const results = await db.insert(salesMrpDetails).values(data).onConflictDoUpdate({
+      target: [salesMrpDetails.brandNumber, salesMrpDetails.brandName, salesMrpDetails.size, salesMrpDetails.productType],
+      set: {
+        salesMrp: sql`excluded.sales_mrp`,
+        updatedAt: new Date(),
+      },
+    }).returning();
+    return results.length;
   }
 
   async createShopDetail(shop: InsertShopDetail): Promise<ShopDetail> {

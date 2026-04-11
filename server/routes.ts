@@ -816,6 +816,67 @@ export async function registerRoutes(
     }
   });
 
+  // Bulk upload Sales MRP from Excel
+  app.post("/api/sales-mrp/bulk-upload", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded." });
+      const ext = req.file.originalname.toLowerCase().split(".").pop() || "";
+      if (!["xls", "xlsx", "csv"].includes(ext)) {
+        return res.status(400).json({ message: "Please upload an .xls, .xlsx, or .csv file." });
+      }
+
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: false });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      if (jsonRows.length === 0) return res.status(400).json({ message: "File is empty or has no data rows." });
+
+      // Normalise column name to field key
+      const norm = (s: string) => String(s).toLowerCase().replace(/[\s_\-:.]/g, "");
+      const COL_MAP: Record<string, string> = {
+        brandnumber: "brandNumber", brandno: "brandNumber",
+        brandname: "brandName",
+        size: "size",
+        salesmrp: "salesMrp", mrp: "salesMrp", salesprice: "salesMrp",
+        producttype: "productType", type: "productType",
+      };
+
+      const rows: { brandNumber: string; brandName: string; size: string; salesMrp: string; productType: string }[] = [];
+      const skipped: number[] = [];
+
+      for (let i = 0; i < jsonRows.length; i++) {
+        const raw = jsonRows[i];
+        const mapped: Record<string, string> = {};
+        for (const [col, val] of Object.entries(raw)) {
+          const key = COL_MAP[norm(col)];
+          if (key) mapped[key] = String(val ?? "").trim();
+        }
+
+        const { brandNumber = "", brandName = "", size = "", salesMrp = "", productType = "" } = mapped;
+        if (!brandNumber || !brandName || !size) { skipped.push(i + 2); continue; } // +2 → Excel row number
+        const mrpNum = parseFloat(salesMrp.replace(/,/g, ""));
+        rows.push({
+          brandNumber: padBrandNumber(brandNumber),
+          brandName,
+          size,
+          salesMrp: isNaN(mrpNum) ? "0" : mrpNum.toFixed(2),
+          productType,
+        });
+      }
+
+      if (rows.length === 0) return res.status(400).json({ message: "No valid rows found. Ensure columns brand_number, brand_name, size are present." });
+
+      const saved = await storage.bulkUpsertSalesMrpDetails(rows);
+      res.json({
+        message: `${saved} Sales MRP record(s) imported successfully.${skipped.length > 0 ? ` Skipped ${skipped.length} row(s) missing required fields (rows: ${skipped.join(", ")}).` : ""}`,
+        saved,
+        skipped: skipped.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to import: " + err.message });
+    }
+  });
+
   app.get(api.sales.isSubmitted.path, async (req, res) => {
     const date = req.query.date as string | undefined;
     if (!date) {
