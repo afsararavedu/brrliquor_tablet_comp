@@ -38,6 +38,7 @@ export interface IStorage {
   getOrders(): Promise<Order[]>;
   bulkCreateOrders(orders: InsertOrder[]): Promise<Order[]>;
   getLatestOrderInvoiceDate(): Promise<string | null>;
+  getEarliestOrderInvoiceDate(): Promise<string | null>;
 
   // Stock
   getStockDetails(): Promise<StockDetail[]>;
@@ -237,6 +238,32 @@ export class DatabaseStorage implements IStorage {
     const dates = result.map(r => normalize(r.invoiceDate || "")).filter(Boolean) as string[];
     if (dates.length === 0) return null;
     return dates.sort().reverse()[0];
+  }
+
+  async getEarliestOrderInvoiceDate(): Promise<string | null> {
+    const result = await db
+      .select({ invoiceDate: orders.invoiceDate })
+      .from(orders)
+      .where(sql`${orders.invoiceDate} IS NOT NULL AND ${orders.invoiceDate} != ''`)
+      .orderBy(asc(orders.id))
+      .limit(100);
+    if (result.length === 0) return null;
+    const MONTHS: Record<string, string> = {
+      jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
+      jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12",
+    };
+    const normalize = (d: string): string | null => {
+      if (!d) return null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      const m1 = d.match(/^(\d{1,2})-([A-Za-z]+)-(\d{4})$/);
+      if (m1) { const mn = MONTHS[m1[2].toLowerCase()]; if (mn) return `${m1[3]}-${mn}-${m1[1].padStart(2,"0")}`; }
+      const m2 = d.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (m2) return `${m2[3]}-${m2[2].padStart(2,"0")}-${m2[1].padStart(2,"0")}`;
+      return null;
+    };
+    const dates = result.map(r => normalize(r.invoiceDate || "")).filter(Boolean) as string[];
+    if (dates.length === 0) return null;
+    return dates.sort()[0];
   }
 
   async bulkCreateOrders(ordersData: InsertOrder[]): Promise<Order[]> {

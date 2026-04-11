@@ -1082,6 +1082,16 @@ export async function registerRoutes(
     }
   });
 
+  // Returns the earliest distinct invoice_date from the orders table (YYYY-MM-DD)
+  app.get("/api/orders/earliest-invoice-date", async (_req, res) => {
+    try {
+      const date = await storage.getEarliestOrderInvoiceDate();
+      res.json({ invoiceDate: date });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch earliest order invoice date" });
+    }
+  });
+
   app.get("/api/sales/summary", async (req, res) => {
     try {
       const date = (req.query.date as string) || new Date().toISOString().split("T")[0];

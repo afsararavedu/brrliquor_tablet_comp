@@ -115,17 +115,23 @@ export default function Sales() {
     gcTime: 0,
   });
 
-  // Latest order invoice date — used to floor the date picker (disable dates before it)
+  // Earliest order invoice date — used to floor the date picker (disable dates before first delivery)
+  const { data: earliestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
+    queryKey: ["/api/orders/earliest-invoice-date"],
+  });
+  const earliestOrderDate = earliestOrderDateData?.invoiceDate
+    ? parse(earliestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
+    : new Date(2020, 0, 1);
+  const earliestOrderDateStr = earliestOrderDateData?.invoiceDate ?? "2020-01-01";
+
+  // Keep this query for other consumers that still need the latest date
   const { data: latestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
     queryKey: ["/api/orders/latest-invoice-date"],
   });
-  const latestOrderDate = latestOrderDateData?.invoiceDate
-    ? parse(latestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
-    : new Date();
   const latestOrderDateStr = latestOrderDateData?.invoiceDate ?? format(new Date(), "yyyy-MM-dd");
 
-  // No auto-switch needed: the selectable range is [latestOrderDate, today]
-  // so today is always a valid selection
+  // No auto-switch needed: the selectable range is [earliestOrderDate, today]
+  // so any date with orders is always a valid selection
 
   // Compute summary client-side from localSales so it updates in real-time
   const summary = useMemo<SalesSummary>(() => {
@@ -477,9 +483,9 @@ export default function Sales() {
               const d = parseDateLocal(selectedDate);
               d.setDate(d.getDate() - 1);
               const prev = formatDateLocal(d);
-              if (prev >= latestOrderDateStr) setSelectedDate(prev);
+              if (prev >= earliestOrderDateStr) setSelectedDate(prev);
             }}
-            disabled={selectedDate <= latestOrderDateStr}
+            disabled={selectedDate <= earliestOrderDateStr}
             className="p-2 rounded-lg border border-border bg-card hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Previous day"
           >
@@ -512,10 +518,10 @@ export default function Sales() {
                     setDatePickerOpen(false);
                   }
                 }}
-                fromDate={latestOrderDate}
+                fromDate={earliestOrderDate}
                 toDate={new Date()}
                 disabled={(date) => {
-                  const floor = new Date(latestOrderDate);
+                  const floor = new Date(earliestOrderDate);
                   floor.setHours(0, 0, 0, 0);
                   if (date < floor) return true;
                   const today = new Date();
