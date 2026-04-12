@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import * as XLSX from "xlsx";
 import { useSales, useBulkUpdateSales, useSubmitSales, useSalesIsSubmitted } from "@/hooks/use-sales";
 import {
   Search,
   Save,
   Loader2,
   Download,
+  Upload,
+  FileSpreadsheet,
   Store,
   Lock,
   CheckCircle,
@@ -193,6 +196,10 @@ export default function Sales() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // Bulk Excel upload state
+  const excelFileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadResult, setUploadResult] = useState<{ updated: number; skipped: number; notFound: number } | null>(null);
+
   const generateCSV = useCallback((data: DailySale[], date: string) => {
     const headers = [
       "SNo", "Brand No", "Brand Name", "Size", "Qty/Case", 
@@ -289,6 +296,130 @@ export default function Sales() {
     }
   }, [localSales, toast, selectedDate, exportDate, generateCSV]);
 
+  // Download Excel template pre-populated with current sales data
+  const handleDownloadTemplate = useCallback(() => {
+    if (!localSales || localSales.length === 0) {
+      toast({ title: "No Data", description: "No sales data available for the selected date.", variant: "destructive" });
+      return;
+    }
+    const wsData = [
+      ["Brand No", "Brand Name", "Size", "Cls Bal (Cs)", "Cls Bal (Btls)", "Breakage"],
+      ...localSales.map(s => [
+        s.brandNumber,
+        s.brandName,
+        s.size,
+        s.closingBalanceCases || 0,
+        s.closingBalanceBottles || 0,
+        s.breakageBottles || 0,
+      ]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws["!cols"] = [{ wch: 12 }, { wch: 40 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sales Template");
+    XLSX.writeFile(wb, `sales_template_${selectedDate}.xlsx`);
+  }, [localSales, selectedDate, toast]);
+
+  // Upload Excel and apply values into localSales (same calculation as handleInputChange)
+  const handleUploadExcel = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target?.result, { type: "binary" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
+        if (rows.length < 2) {
+          toast({ title: "Invalid File", description: "The file has no data rows.", variant: "destructive" });
+          return;
+        }
+        const header = (rows[0] as string[]).map(h => String(h || "").trim().toLowerCase());
+        const col = {
+          brandNo:  header.findIndex(h => h.includes("brand no")),
+          size:     header.findIndex(h => h.includes("size")),
+          clsCs:    header.findIndex(h => h.includes("cls bal (cs)")),
+          clsBtls:  header.findIndex(h => h.includes("cls bal (btls)")),
+          breakage: header.findIndex(h => h.includes("breakage")),
+        };
+        if (col.brandNo === -1 || col.size === -1) {
+          toast({ title: "Invalid Template", description: "Could not find Brand No or Size columns. Please use the downloaded template.", variant: "destructive" });
+          return;
+        }
+
+        let updated = 0, skipped = 0, notFound = 0;
+
+        setLocalSales(prev => {
+          const next = [...prev];
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i] as any[];
+            if (!row || row.length === 0) continue;
+            const brandNo = String(row[col.brandNo] ?? "").trim();
+            const size = String(row[col.size] ?? "").trim();
+            if (!brandNo || !size) { skipped++; continue; }
+
+            const clsCsRaw   = col.clsCs   >= 0 ? row[col.clsCs]   : undefined;
+            const clsBtlsRaw = col.clsBtls >= 0 ? row[col.clsBtls] : undefined;
+            const brkRaw     = col.breakage >= 0 ? row[col.breakage] : undefined;
+
+            const clsEmpty  = clsCsRaw  === undefined || clsCsRaw  === null || clsCsRaw  === "";
+            const btlsEmpty = clsBtlsRaw === undefined || clsBtlsRaw === null || clsBtlsRaw === "";
+
+            // Both empty → no sale → skip (closing stays as opening)
+            if (clsEmpty && btlsEmpty) { skipped++; continue; }
+
+            const clsCs   = clsEmpty  ? 0 : (parseInt(String(clsCsRaw),   10) || 0);
+            const clsBtls = btlsEmpty ? 0 : (parseInt(String(clsBtlsRaw), 10) || 0);
+            const breakage = (brkRaw === undefined || brkRaw === null || brkRaw === "") ? 0 : (parseInt(String(brkRaw), 10) || 0);
+
+            const idx = next.findIndex(s => s.brandNumber === brandNo && s.size === size);
+            if (idx === -1) { notFound++; continue; }
+
+            // Apply identical calculation to handleInputChange
+            const item = next[idx];
+            const opBalBtls  = item.openingBalanceBottles || 0;
+            const qtyPerCase = item.quantityPerCase || 0;
+            const newStockCs = item.newStockCases || 0;
+            const newStockBtls = item.newStockBottles || 0;
+            const mrp = parseFloat(item.mrp as string) || 0;
+
+            const totalStock      = opBalBtls + (qtyPerCase * newStockCs) + newStockBtls;
+            const closingTotal    = clsBtls + (clsCs * qtyPerCase);
+            const soldBottles     = totalStock - closingTotal;
+            const saleValue       = soldBottles * mrp;
+            const totalClosingStock    = closingTotal;
+            const finalClosingBalance  = Math.round(totalClosingStock - breakage);
+
+            next[idx] = {
+              ...item,
+              closingBalanceCases: clsCs,
+              closingBalanceBottles: clsBtls,
+              breakageBottles: breakage,
+              soldBottles,
+              saleValue: saleValue.toFixed(2),
+              totalSaleValue: saleValue.toFixed(2),
+              totalClosingStock,
+              finalClosingBalance,
+            };
+            updated++;
+          }
+          setUploadResult({ updated, skipped, notFound });
+          return next;
+        });
+
+        if (excelFileInputRef.current) excelFileInputRef.current.value = "";
+        toast({
+          title: "Upload Complete",
+          description: `${updated} row(s) updated · ${skipped} skipped (blank) · ${notFound} not matched`,
+          className: updated > 0 ? "bg-green-50 border-green-200 text-green-800" : undefined,
+        });
+      } catch {
+        toast({ title: "Upload Failed", description: "Could not read the file. Please use the downloaded template.", variant: "destructive" });
+      }
+    };
+    reader.readAsBinaryString(file);
+  }, [toast]);
+
   // Sync local state when data loads or date changes
   useEffect(() => {
     if (sales) {
@@ -309,6 +440,7 @@ export default function Sales() {
   useEffect(() => {
     setCurrentPage(1);
     setSearchTerm("");
+    setUploadResult(null);
   }, [selectedDate]);
 
   const handleInputChange = (
@@ -621,6 +753,47 @@ export default function Sales() {
 
       {/* Main Content Card */}
       <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col">
+
+        {/* Bulk Update Bar */}
+        <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bulk Update via Excel</span>
+          <button
+            onClick={handleDownloadTemplate}
+            disabled={!localSales || localSales.length === 0}
+            data-testid="button-download-template"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-lg hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-green-600" />
+            Download Template
+          </button>
+          <button
+            onClick={() => { setUploadResult(null); excelFileInputRef.current?.click(); }}
+            disabled={!localSales || localSales.length === 0 || (isSubmitted && !isAdmin)}
+            data-testid="button-upload-excel"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-lg hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Upload className="w-3.5 h-3.5 text-blue-600" />
+            Upload Excel
+          </button>
+          <input
+            ref={excelFileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleUploadExcel}
+            data-testid="input-upload-excel"
+          />
+          {uploadResult && (
+            <span className="text-xs font-medium text-muted-foreground bg-card border border-border rounded-lg px-3 py-1.5 flex items-center gap-2">
+              <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+              <span className="text-green-700 font-semibold">{uploadResult.updated} updated</span>
+              {uploadResult.skipped > 0 && <span>· {uploadResult.skipped} skipped</span>}
+              {uploadResult.notFound > 0 && <span className="text-amber-600">· {uploadResult.notFound} not matched</span>}
+              <span className="text-muted-foreground/60">— review & click Save Sales</span>
+            </span>
+          )}
+        </div>
+
         {/* Toolbar */}
         <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-4 justify-between items-center bg-card">
           <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
