@@ -439,13 +439,31 @@ export default function Sales() {
   // Sync local state when data loads or date changes
   useEffect(() => {
     if (sales) {
-      // Recompute finalClosingBalance using the current formula (TOT CLS STK - BREAKAGE)
+      // Recompute all derived fields using the current formula
       const recalculated = sales.map((s) => {
-        const totalClosingStock = s.totalClosingStock ?? 0;
-        const breakage = s.breakageBottles ?? 0;
+        const opBalBtls  = s.openingBalanceBottles ?? 0;
+        const qtyPerCase = s.quantityPerCase ?? 0;
+        const newStockCs = s.newStockCases ?? 0;
+        const newStockBtls = s.newStockBottles ?? 0;
+        const closingCs  = s.closingBalanceCases ?? 0;
+        const closingBtls = s.closingBalanceBottles ?? 0;
+        const breakage   = s.breakageBottles ?? 0;
+        const mrp        = parseFloat(s.mrp as string) || 0;
+
+        const totalStock      = opBalBtls + (qtyPerCase * newStockCs) + newStockBtls;
+        const closingTotal    = closingBtls + (closingCs * qtyPerCase);
+        const soldBottles     = totalStock - closingTotal;
+        const saleValue       = soldBottles * mrp;
+        const totalClosingStock = closingTotal;
+        const finalClosingBalance = Math.round(totalClosingStock - breakage);
+
         return {
           ...s,
-          finalClosingBalance: Math.round(totalClosingStock - breakage),
+          soldBottles,
+          saleValue: saleValue.toFixed(2),
+          totalSaleValue: saleValue.toFixed(2),
+          totalClosingStock,
+          finalClosingBalance,
         };
       });
       setLocalSales(recalculated);
