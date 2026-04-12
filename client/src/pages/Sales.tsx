@@ -439,30 +439,36 @@ export default function Sales() {
   // Sync local state when data loads or date changes
   useEffect(() => {
     if (sales) {
-      // Recompute all derived fields using the current formula
       const recalculated = sales.map((s) => {
-        const opBalBtls  = s.openingBalanceBottles ?? 0;
-        const qtyPerCase = s.quantityPerCase ?? 0;
-        const newStockCs = s.newStockCases ?? 0;
+        const opBalBtls    = s.openingBalanceBottles ?? 0;
+        const qtyPerCase   = s.quantityPerCase ?? 0;
+        const newStockCs   = s.newStockCases ?? 0;
         const newStockBtls = s.newStockBottles ?? 0;
-        const closingCs  = s.closingBalanceCases ?? 0;
-        const closingBtls = s.closingBalanceBottles ?? 0;
-        const breakage   = s.breakageBottles ?? 0;
-        const mrp        = parseFloat(s.mrp as string) || 0;
+        const closingCs    = s.closingBalanceCases ?? 0;
+        const closingBtls  = s.closingBalanceBottles ?? 0;
+        const breakage     = s.breakageBottles ?? 0;
+        const mrp          = parseFloat(s.mrp as string) || 0;
 
-        const totalStock      = opBalBtls + (qtyPerCase * newStockCs) + newStockBtls;
-        const closingTotal    = closingBtls + (closingCs * qtyPerCase);
-        const soldBottles     = totalStock - closingTotal;
-        const saleValue       = soldBottles * mrp;
-        const totalClosingStock = closingTotal;
-        const finalClosingBalance = Math.round(totalClosingStock - breakage);
+        const closingTotal      = closingBtls + (closingCs * qtyPerCase);
+        const finalClosingBalance = Math.round(closingTotal - breakage);
+
+        // Only recalculate sale value if closing balance has been entered
+        // (i.e. user has actually saved data for this row before)
+        const hasClosingData = closingCs > 0 || closingBtls > 0;
+        if (!hasClosingData) {
+          return { ...s, finalClosingBalance };
+        }
+
+        const totalStock    = opBalBtls + (qtyPerCase * newStockCs) + newStockBtls;
+        const soldBottles   = totalStock - closingTotal;
+        const saleValue     = soldBottles * mrp;
 
         return {
           ...s,
           soldBottles,
           saleValue: saleValue.toFixed(2),
           totalSaleValue: saleValue.toFixed(2),
-          totalClosingStock,
+          totalClosingStock: closingTotal,
           finalClosingBalance,
         };
       });
