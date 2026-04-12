@@ -308,9 +308,9 @@ export default function Sales() {
         s.brandNumber,
         s.brandName,
         s.size,
-        s.closingBalanceCases || 0,
-        s.closingBalanceBottles || 0,
-        s.breakageBottles || 0,
+        "",
+        "",
+        "",
       ]),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -756,7 +756,7 @@ export default function Sales() {
 
         {/* Bulk Update Bar */}
         <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bulk Update via Excel</span>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bulk Sales Update via Excel</span>
           <button
             onClick={handleDownloadTemplate}
             disabled={!localSales || localSales.length === 0}
