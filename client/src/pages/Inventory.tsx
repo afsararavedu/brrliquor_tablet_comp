@@ -112,7 +112,8 @@ export default function Inventory() {
   // Saved Orders Filter State
   const [filterInvoiceDate, setFilterInvoiceDate] = useState("");
   const [filterIcdcNumber, setFilterIcdcNumber] = useState("");
-  const [appliedFilters, setAppliedFilters] = useState<{ invoiceDate?: string; icdcNumber?: string }>({});
+  const [filterBrandNumber, setFilterBrandNumber] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState<{ invoiceDate?: string; icdcNumber?: string; brandNumber?: string }>({});
   const { data: savedOrders, isLoading: isLoadingOrders } = useOrders(appliedFilters);
   const [savedPage, setSavedPage] = useState(1);
   const [savedPageSize, setSavedPageSize] = useState(10);
@@ -305,6 +306,7 @@ export default function Inventory() {
     setAppliedFilters({
       invoiceDate: filterInvoiceDate || undefined,
       icdcNumber: filterIcdcNumber || undefined,
+      brandNumber: filterBrandNumber || undefined,
     });
     setSavedPage(1);
   };
@@ -312,6 +314,7 @@ export default function Inventory() {
   const handleClearFilters = () => {
     setFilterInvoiceDate("");
     setFilterIcdcNumber("");
+    setFilterBrandNumber("");
     setAppliedFilters({});
     setSavedPage(1);
   };
@@ -333,7 +336,7 @@ export default function Inventory() {
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const hasFilters = appliedFilters.invoiceDate || appliedFilters.icdcNumber;
+    const hasFilters = appliedFilters.invoiceDate || appliedFilters.icdcNumber || appliedFilters.brandNumber;
     a.href = url;
     a.download = hasFilters ? `orders_filtered_${new Date().toISOString().slice(0, 10)}.csv` : `orders_all_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
@@ -604,10 +607,21 @@ export default function Inventory() {
                     data-testid="input-filter-icdc-number"
                   />
                 </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-muted-foreground">Brand No</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 0019"
+                    className="input-field w-32"
+                    value={filterBrandNumber}
+                    onChange={(e) => setFilterBrandNumber(e.target.value)}
+                    data-testid="input-filter-brand-number"
+                  />
+                </div>
                 <Button onClick={handleApplyFilters} data-testid="button-apply-filters">
                   <Search className="w-4 h-4 mr-2" /> Search
                 </Button>
-                {(appliedFilters.invoiceDate || appliedFilters.icdcNumber) && (
+                {(appliedFilters.invoiceDate || appliedFilters.icdcNumber || appliedFilters.brandNumber) && (
                   <Button variant="outline" onClick={handleClearFilters} data-testid="button-clear-filters">
                     <X className="w-4 h-4 mr-2" /> Clear
                   </Button>
@@ -616,7 +630,7 @@ export default function Inventory() {
                   <Download className="w-4 h-4 mr-2" /> Export CSV
                 </Button>
               </div>
-              {(appliedFilters.invoiceDate || appliedFilters.icdcNumber) && (
+              {(appliedFilters.invoiceDate || appliedFilters.icdcNumber || appliedFilters.brandNumber) && (
                 <div className="flex flex-wrap gap-2 mt-3 text-xs">
                   <span className="text-muted-foreground">Active filters:</span>
                   {appliedFilters.invoiceDate && (
@@ -624,6 +638,9 @@ export default function Inventory() {
                   )}
                   {appliedFilters.icdcNumber && (
                     <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-md">ICDC: {appliedFilters.icdcNumber}</span>
+                  )}
+                  {appliedFilters.brandNumber && (
+                    <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-md">Brand No: {appliedFilters.brandNumber}</span>
                   )}
                 </div>
               )}

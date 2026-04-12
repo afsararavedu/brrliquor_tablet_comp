@@ -2,15 +2,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { type InsertOrder } from "@shared/schema";
 
-export function useOrders(filters?: { invoiceDate?: string; icdcNumber?: string }) {
+export function useOrders(filters?: { invoiceDate?: string; icdcNumber?: string; brandNumber?: string }) {
   const params = new URLSearchParams();
   if (filters?.invoiceDate) params.set("invoice_date", filters.invoiceDate);
   if (filters?.icdcNumber) params.set("icdc_number", filters.icdcNumber);
+  if (filters?.brandNumber) params.set("brand_number", filters.brandNumber);
   const queryString = params.toString();
   const url = queryString ? `${api.orders.list.path}?${queryString}` : api.orders.list.path;
 
   return useQuery({
-    queryKey: [api.orders.list.path, filters?.invoiceDate || "", filters?.icdcNumber || ""],
+    queryKey: [api.orders.list.path, filters?.invoiceDate || "", filters?.icdcNumber || "", filters?.brandNumber || ""],
     queryFn: async () => {
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch orders");
@@ -49,7 +50,7 @@ export function useUploadFile() {
     mutationFn: async (formData: FormData) => {
       const res = await fetch(api.upload.create.path, {
         method: api.upload.create.method,
-        body: formData, // FormData automatically sets the correct Content-Type boundary
+        body: formData,
       });
 
       if (!res.ok) throw new Error("Failed to upload file");

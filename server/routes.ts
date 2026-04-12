@@ -1006,6 +1006,7 @@ export async function registerRoutes(
   app.get(api.orders.list.path, async (req, res) => {
     const invoiceDate = req.query.invoice_date as string | undefined;
     const icdcNumber = req.query.icdc_number as string | undefined;
+    const brandNumber = req.query.brand_number as string | undefined;
     const allOrders = await storage.getOrders();
     let filtered = allOrders;
     if (invoiceDate) {
@@ -1013,6 +1014,10 @@ export async function registerRoutes(
     }
     if (icdcNumber) {
       filtered = filtered.filter((o) => o.icdcNumber === icdcNumber);
+    }
+    if (brandNumber) {
+      const search = brandNumber.trim();
+      filtered = filtered.filter((o) => o.brandNumber.includes(search));
     }
     res.json(filtered);
   });
