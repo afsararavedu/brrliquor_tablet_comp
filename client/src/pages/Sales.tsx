@@ -506,20 +506,30 @@ export default function Sales() {
           const breakage = updatedItem.breakageBottles || 0;
 
           const totalStock = opBalBtls + (qtyPerCase * newStockCs) + newStockBtls;
+
+          // If both closing fields are 0/untouched → no sales: closing = total stock
+          if (closingCs === 0 && closingBtls === 0) {
+            return {
+              ...updatedItem,
+              soldBottles: 0,
+              saleValue: "0.00",
+              totalSaleValue: "0.00",
+              totalClosingStock: totalStock,
+              finalClosingBalance: Math.round(totalStock - breakage),
+            };
+          }
+
           const closingTotal = closingBtls + (closingCs * qtyPerCase);
           const soldBottles = totalStock - closingTotal;
-
           const saleValue = soldBottles * mrp;
-          const totalClosingStock = closingTotal;
-          const finalClosingBalance = Math.round(totalClosingStock - breakage);
 
           return {
             ...updatedItem,
             soldBottles,
             saleValue: saleValue.toFixed(2),
             totalSaleValue: saleValue.toFixed(2),
-            totalClosingStock,
-            finalClosingBalance,
+            totalClosingStock: closingTotal,
+            finalClosingBalance: Math.round(closingTotal - breakage),
           };
         }
         return item;
@@ -541,9 +551,11 @@ export default function Sales() {
       return;
     }
 
-    // If Sold Btls = 0, set Tot Cls Stk = Total Stk (nothing was sold, full stock carries forward)
+    // If both closing fields are untouched (0/empty) → no sales: closing = total stock
     const dataToSave = localSales.map((item) => {
-      if ((item.soldBottles || 0) === 0) {
+      const closingCs = item.closingBalanceCases || 0;
+      const closingBtls = item.closingBalanceBottles || 0;
+      if (closingCs === 0 && closingBtls === 0) {
         const totalStk =
           (item.openingBalanceBottles || 0) +
           (item.quantityPerCase || 0) * (item.newStockCases || 0) +
@@ -551,6 +563,9 @@ export default function Sales() {
         const finalClsStkBal = Math.round(totalStk - (item.breakageBottles || 0));
         return {
           ...item,
+          soldBottles: 0,
+          saleValue: "0.00",
+          totalSaleValue: "0.00",
           totalClosingStock: totalStk,
           finalClosingBalance: finalClsStkBal,
         };
@@ -1029,7 +1044,7 @@ export default function Sales() {
                           <input
                             type="number"
                             min="0"
-                            value={item.closingBalanceCases || 0}
+                            value={item.closingBalanceCases || ""}
                             onChange={(e) =>
                               handleInputChange(
                                 item.id,
@@ -1049,7 +1064,7 @@ export default function Sales() {
                           <input
                             type="number"
                             min="0"
-                            value={item.closingBalanceBottles || 0}
+                            value={item.closingBalanceBottles || ""}
                             onChange={(e) =>
                               handleInputChange(
                                 item.id,
