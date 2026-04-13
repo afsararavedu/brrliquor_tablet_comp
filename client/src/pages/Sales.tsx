@@ -345,6 +345,19 @@ export default function Sales() {
   const handleUploadExcel = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate that the uploaded file matches the currently selected date
+    if (!file.name.includes(selectedDate)) {
+      toast({
+        title: "Wrong Template File",
+        description: `This file doesn't match the selected date (${selectedDate}). Please download the template for the correct date and upload that file.`,
+        variant: "destructive",
+        duration: 6000,
+      });
+      if (excelFileInputRef.current) excelFileInputRef.current.value = "";
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
@@ -444,7 +457,7 @@ export default function Sales() {
       }
     };
     reader.readAsBinaryString(file);
-  }, [toast]);
+  }, [toast, selectedDate]);
 
   // Sync local state when data loads or date changes
   useEffect(() => {
