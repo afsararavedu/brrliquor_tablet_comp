@@ -15,6 +15,10 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  Pencil,
+  Trash2,
+  Check,
+  X,
 } from "lucide-react";
 import { type DailySale, type ShopDetail, type Order } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -204,6 +208,11 @@ export default function Sales() {
   // Not touched = no sales (closing stays as total stock).
   // Touched with 0 = all sold. Touched with >0 = partial sale.
   const [touchedClosingIds, setTouchedClosingIds] = useState<Set<number>>(new Set());
+
+  // Edit / Delete row state
+  const [editingRowId, setEditingRowId] = useState<number | null>(null);
+  const [editRowData, setEditRowData] = useState<Partial<DailySale>>({});
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
   const generateCSV = useCallback((data: DailySale[], date: string) => {
     const headers = [
@@ -675,6 +684,79 @@ export default function Sales() {
     });
   };
 
+  // --- Edit row handlers ---
+  const handleEditStart = (item: DailySale) => {
+    setEditingRowId(item.id);
+    setEditRowData({ ...item });
+    setDeleteConfirmId(null);
+  };
+
+  const handleEditFieldChange = (field: keyof DailySale, value: string) => {
+    setEditRowData((prev) => ({ ...prev, [field]: value === "" ? 0 : Number(value) }));
+  };
+
+  const handleEditConfirm = () => {
+    if (editingRowId === null) return;
+    const d = editRowData;
+    const qtyPerCase = Number(d.quantityPerCase ?? 0);
+    const opBal = Number(d.openingBalanceBottles ?? 0);
+    const newCs = Number(d.newStockCases ?? 0);
+    const newBtls = Number(d.newStockBottles ?? 0);
+    const clsCs = Number(d.closingBalanceCases ?? 0);
+    const clsBtls = Number(d.closingBalanceBottles ?? 0);
+    const breakage = Number(d.breakageBottles ?? 0);
+    const mrp = Number(d.mrp ?? 0);
+
+    const totalStock = opBal + (qtyPerCase * newCs) + newBtls;
+    const closingTotal = clsBtls + (clsCs * qtyPerCase);
+    const soldBottles = totalStock - closingTotal;
+    const saleValue = (soldBottles * mrp).toFixed(2);
+    const totalClosingStock = closingTotal;
+    const finalClosingBalance = Math.round(totalClosingStock - breakage);
+
+    setLocalSales((prev) =>
+      prev.map((row) =>
+        row.id === editingRowId
+          ? {
+              ...row,
+              openingBalanceBottles: opBal,
+              newStockCases: newCs,
+              newStockBottles: newBtls,
+              closingBalanceCases: clsCs,
+              closingBalanceBottles: clsBtls,
+              breakageBottles: breakage,
+              soldBottles,
+              saleValue,
+              totalClosingStock,
+              finalClosingBalance,
+            }
+          : row,
+      ),
+    );
+    // Mark as touched so Save Sales uses the edited values
+    setTouchedClosingIds((prev) => new Set(prev).add(editingRowId));
+    setEditingRowId(null);
+    setEditRowData({});
+  };
+
+  const handleEditCancel = () => {
+    setEditingRowId(null);
+    setEditRowData({});
+  };
+
+  // --- Delete row handlers ---
+  const handleDeleteConfirm = async (id: number) => {
+    try {
+      await apiRequest("DELETE", `/api/sales/${id}`);
+      setLocalSales((prev) => prev.filter((row) => row.id !== id));
+      setTouchedClosingIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
+      setDeleteConfirmId(null);
+      toast({ title: "Row Deleted", description: "Sales row has been removed.", className: "bg-green-50 border-green-200 text-green-800" });
+    } catch {
+      toast({ title: "Delete Failed", description: "Could not delete this row.", variant: "destructive" });
+    }
+  };
+
   const filteredSales = localSales.filter(
     (item) =>
       item.brandName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1040,14 +1122,15 @@ export default function Sales() {
                 <th className="table-header w-20 text-right font-bold text-primary border-r border-border">Sale Value</th>
                 <th className="table-header w-16 text-center border-r border-border">Tot Cls Stk</th>
                 <th className="table-header w-14 text-center border-r border-border">Breakage</th>
-                <th className="table-header w-20 text-center">Final Cls Stk Bal</th>
+                <th className="table-header w-20 text-center border-r border-border">Final Cls Stk Bal</th>
+                <th className="table-header w-16 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginatedSales.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={17}
+                    colSpan={18}
                     className="py-12 text-center text-muted-foreground"
                   >
                     {searchTerm ? `No sales records found matching "${searchTerm}"` : `No sales data for ${selectedDate}`}
@@ -1056,11 +1139,29 @@ export default function Sales() {
               ) : (
                 paginatedSales.map((item, idx) => {
                   const globalIdx = (currentPage - 1) * pageSize + idx;
-                  const totalStock = (item.openingBalanceBottles || 0) + ((item.quantityPerCase || 0) * (item.newStockCases || 0)) + (item.newStockBottles || 0);
+                  const isEditing = editingRowId === item.id;
+                  const ed = editRowData;
+                  const editOpBal = isEditing ? Number(ed.openingBalanceBottles ?? item.openingBalanceBottles ?? 0) : (item.openingBalanceBottles || 0);
+                  const editNewCs = isEditing ? Number(ed.newStockCases ?? item.newStockCases ?? 0) : (item.newStockCases || 0);
+                  const editNewBtls = isEditing ? Number(ed.newStockBottles ?? item.newStockBottles ?? 0) : (item.newStockBottles || 0);
+                  const editQtyPerCase = isEditing ? Number(ed.quantityPerCase ?? item.quantityPerCase ?? 0) : (item.quantityPerCase || 0);
+                  const editClsCs = isEditing ? Number(ed.closingBalanceCases ?? 0) : (item.closingBalanceCases || 0);
+                  const editClsBtls = isEditing ? Number(ed.closingBalanceBottles ?? 0) : (item.closingBalanceBottles || 0);
+                  const editBreakage = isEditing ? Number(ed.breakageBottles ?? item.breakageBottles ?? 0) : (item.breakageBottles || 0);
+                  const editMrp = isEditing ? Number(ed.mrp ?? item.mrp ?? 0) : Number(item.mrp || 0);
+                  const editTotalStock = editOpBal + (editQtyPerCase * editNewCs) + editNewBtls;
+                  const editClosingTotal = editClsBtls + (editClsCs * editQtyPerCase);
+                  const editSoldBottles = isEditing ? editTotalStock - editClosingTotal : (item.soldBottles || 0);
+                  const editSaleValue = isEditing ? (editSoldBottles * editMrp).toFixed(2) : (item.saleValue || "0.00");
+                  const editTotalClosingStock = isEditing ? editClosingTotal : (item.totalClosingStock || 0);
+                  const editFinalClosing = isEditing ? Math.round(editTotalClosingStock - editBreakage) : Math.round(Number(item.finalClosingBalance) || 0);
+
+                  const totalStock = editTotalStock;
+                  const editInputClass = "w-full text-center p-1 rounded-md border border-blue-300 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none bg-blue-50 font-bold text-foreground shadow-sm";
                   return (
                     <tr
                       key={item.id}
-                      className={`hover:bg-muted/30 transition-colors group ${isSubmitted ? "opacity-90" : ""}`}
+                      className={`hover:bg-muted/30 transition-colors group ${isSubmitted ? "opacity-90" : ""} ${isEditing ? "bg-blue-50/40 dark:bg-blue-900/10" : ""}`}
                     >
                       <td className="table-cell font-mono text-xs text-muted-foreground border-r border-border">
                         {globalIdx + 1}
@@ -1075,90 +1176,149 @@ export default function Sales() {
                       <td className="table-cell text-muted-foreground border-r border-border">
                         {item.quantityPerCase}
                       </td>
-                      <td className="table-cell text-right font-mono text-muted-foreground bg-blue-50/10 group-hover:bg-blue-50/30 border-r border-border">
-                        {item.openingBalanceBottles}
+                      {/* Op Bal — editable in edit mode */}
+                      <td className="table-cell p-1 bg-blue-50/10 group-hover:bg-blue-50/30 border-r border-border">
+                        {isEditing ? (
+                          <input type="number" min="0" value={editOpBal}
+                            onChange={(e) => handleEditFieldChange("openingBalanceBottles", e.target.value)}
+                            className={editInputClass} />
+                        ) : (
+                          <span className="block text-right font-mono text-muted-foreground">{item.openingBalanceBottles}</span>
+                        )}
                       </td>
-                      <td className="table-cell text-right font-mono text-muted-foreground bg-green-50/10 group-hover:bg-green-50/30 border-r border-border">
-                        {item.newStockCases}
+                      {/* New Stk Cs — editable in edit mode */}
+                      <td className="table-cell p-1 bg-green-50/10 group-hover:bg-green-50/30 border-r border-border">
+                        {isEditing ? (
+                          <input type="number" min="0" value={editNewCs}
+                            onChange={(e) => handleEditFieldChange("newStockCases", e.target.value)}
+                            className={editInputClass} />
+                        ) : (
+                          <span className="block text-right font-mono text-muted-foreground">{item.newStockCases}</span>
+                        )}
                       </td>
-                      <td className="table-cell text-right font-mono text-muted-foreground bg-green-50/10 group-hover:bg-green-50/30 border-r border-border">
-                        {item.newStockBottles}
+                      {/* New Stk Btls — editable in edit mode */}
+                      <td className="table-cell p-1 bg-green-50/10 group-hover:bg-green-50/30 border-r border-border">
+                        {isEditing ? (
+                          <input type="number" min="0" value={editNewBtls}
+                            onChange={(e) => handleEditFieldChange("newStockBottles", e.target.value)}
+                            className={editInputClass} />
+                        ) : (
+                          <span className="block text-right font-mono text-muted-foreground">{item.newStockBottles}</span>
+                        )}
                       </td>
                       <td className="table-cell text-right font-mono text-muted-foreground border-r border-border">
                         {totalStock}
                       </td>
+                      {/* Cls Bal Cs */}
                       <td className="table-cell p-1 bg-orange-50/30 border-r border-border">
-                        {isSubmitted && !isAdmin ? (
+                        {isSubmitted && !isAdmin && !isEditing ? (
                           <span className="block w-full text-center font-bold text-foreground py-1">{item.closingBalanceCases || 0}</span>
+                        ) : isEditing ? (
+                          <input type="number" min="0" value={editClsCs}
+                            onChange={(e) => handleEditFieldChange("closingBalanceCases", e.target.value)}
+                            className={editInputClass} />
                         ) : (
                           <input
-                            type="number"
-                            min="0"
+                            type="number" min="0"
                             value={touchedClosingIds.has(item.id) ? (item.closingBalanceCases ?? 0) : ""}
-                            onChange={(e) =>
-                              handleInputChange(
-                                item.id,
-                                "closingBalanceCases",
-                                e.target.value,
-                              )
-                            }
+                            onChange={(e) => handleInputChange(item.id, "closingBalanceCases", e.target.value)}
                             data-testid={`input-closing-cases-${item.id}`}
                             className="w-full text-center p-1 rounded-md border border-orange-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none font-bold text-foreground bg-white shadow-sm"
                           />
                         )}
                       </td>
+                      {/* Cls Bal Btls */}
                       <td className="table-cell p-1 bg-orange-50/30 border-r border-border">
-                        {isSubmitted && !isAdmin ? (
+                        {isSubmitted && !isAdmin && !isEditing ? (
                           <span className="block w-full text-center font-bold text-foreground py-1">{item.closingBalanceBottles || 0}</span>
+                        ) : isEditing ? (
+                          <input type="number" min="0" value={editClsBtls}
+                            onChange={(e) => handleEditFieldChange("closingBalanceBottles", e.target.value)}
+                            className={editInputClass} />
                         ) : (
                           <input
-                            type="number"
-                            min="0"
+                            type="number" min="0"
                             value={touchedClosingIds.has(item.id) ? (item.closingBalanceBottles ?? 0) : ""}
-                            onChange={(e) =>
-                              handleInputChange(
-                                item.id,
-                                "closingBalanceBottles",
-                                e.target.value,
-                              )
-                            }
+                            onChange={(e) => handleInputChange(item.id, "closingBalanceBottles", e.target.value)}
                             data-testid={`input-closing-bottles-${item.id}`}
                             className="w-full text-center p-1 rounded-md border border-orange-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none font-bold text-foreground bg-white shadow-sm"
                           />
                         )}
                       </td>
-                      <td className={`table-cell text-center font-mono border-r border-border ${(item.soldBottles || 0) < 0 ? 'bg-red-100 text-red-700 font-bold dark:bg-red-900/30 dark:text-red-400' : ''}`}>
-                        {item.soldBottles}
-                        {(item.soldBottles || 0) < 0 && <span className="block text-[9px] text-red-500">⚠ negative</span>}
+                      <td className={`table-cell text-center font-mono border-r border-border ${editSoldBottles < 0 ? 'bg-red-100 text-red-700 font-bold dark:bg-red-900/30 dark:text-red-400' : ''}`}>
+                        {isEditing ? editSoldBottles : item.soldBottles}
+                        {(isEditing ? editSoldBottles : (item.soldBottles || 0)) < 0 && <span className="block text-[9px] text-red-500">⚠ negative</span>}
                       </td>
                       <td className="table-cell text-center font-mono bg-blue-50/10 group-hover:bg-blue-50/30 border-r border-border">
-                        {item.mrp || 0}
+                        {editMrp}
                       </td>
-                      <td className={`table-cell text-right font-bold font-mono border-r border-border ${parseFloat(item.saleValue as string || '0') < 0 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' : 'text-primary'}`}>
-                        {parseFloat(item.saleValue as string || '0') < 0 && <span className="mr-1">⚠</span>}
-                        ₹{item.saleValue}
+                      <td className={`table-cell text-right font-bold font-mono border-r border-border ${parseFloat(String(editSaleValue)) < 0 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' : 'text-primary'}`}>
+                        {parseFloat(String(editSaleValue)) < 0 && <span className="mr-1">⚠</span>}
+                        ₹{isEditing ? editSaleValue : item.saleValue}
                       </td>
                       <td className="table-cell text-center font-mono border-r border-border">
-                        {item.totalClosingStock}
+                        {isEditing ? editTotalClosingStock : item.totalClosingStock}
                       </td>
+                      {/* Breakage */}
                       <td className="table-cell p-1 border-r border-border">
-                        {isSubmitted && !isAdmin ? (
+                        {isSubmitted && !isAdmin && !isEditing ? (
                           <span className="block w-full text-center py-1">{item.breakageBottles || 0}</span>
+                        ) : isEditing ? (
+                          <input type="number" min="0" value={editBreakage}
+                            onChange={(e) => handleEditFieldChange("breakageBottles", e.target.value)}
+                            className={editInputClass} />
                         ) : (
                           <input
-                            type="number"
-                            min="0"
+                            type="number" min="0"
                             value={item.breakageBottles || 0}
-                            onChange={(e) =>
-                              handleInputChange(item.id, "breakageBottles", e.target.value)
-                            }
+                            onChange={(e) => handleInputChange(item.id, "breakageBottles", e.target.value)}
                             data-testid={`input-breakage-${item.id}`}
                             className="w-full text-center p-1 rounded-md border border-input focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                           />
                         )}
                       </td>
-                      <td className="table-cell text-center font-mono">
-                        {Math.round(Number(item.finalClosingBalance) || 0)}
+                      <td className="table-cell text-center font-mono border-r border-border">
+                        {isEditing ? editFinalClosing : Math.round(Number(item.finalClosingBalance) || 0)}
+                      </td>
+                      {/* Actions column */}
+                      <td className="table-cell text-center">
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <button onClick={handleEditConfirm} title="Confirm Edit"
+                              className="p-1 rounded bg-green-100 hover:bg-green-200 text-green-700 transition-colors" data-testid={`btn-edit-confirm-${item.id}`}>
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={handleEditCancel} title="Cancel Edit"
+                              className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors" data-testid={`btn-edit-cancel-${item.id}`}>
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : deleteConfirmId === item.id ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[9px] text-red-600 font-semibold">Sure?</span>
+                            <div className="flex gap-1">
+                              <button onClick={() => handleDeleteConfirm(item.id)} title="Yes, delete"
+                                className="p-1 rounded bg-red-100 hover:bg-red-200 text-red-700 transition-colors" data-testid={`btn-delete-confirm-${item.id}`}>
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => setDeleteConfirmId(null)} title="Cancel"
+                                className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors" data-testid={`btn-delete-cancel-${item.id}`}>
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleEditStart(item)} title="Edit row"
+                              className="p-1 rounded hover:bg-blue-100 text-blue-600 transition-colors" data-testid={`btn-edit-${item.id}`}>
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => { setDeleteConfirmId(item.id); setEditingRowId(null); }} title="Delete row"
+                              className="p-1 rounded hover:bg-red-100 text-red-500 transition-colors" data-testid={`btn-delete-${item.id}`}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

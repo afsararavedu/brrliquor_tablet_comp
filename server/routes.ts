@@ -1005,6 +1005,14 @@ export async function registerRoutes(
   });
 
 
+  // Delete a single daily_sales row by ID (admin only or own date)
+  app.delete("/api/sales/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    await storage.deleteDailySale(id);
+    res.json({ success: true });
+  });
+
   // Daily stock by date
   app.get("/api/daily-stock", async (req, res) => {
     const date = req.query.date as string | undefined;

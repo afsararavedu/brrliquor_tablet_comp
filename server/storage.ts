@@ -30,6 +30,7 @@ export interface IStorage {
   getEarliestInvoiceDate(): Promise<string | null>;
   bulkUpdateDailySales(sales: InsertDailySale[]): Promise<DailySale[]>;
   bulkUpdateDailySalesForDate(sales: InsertDailySale[], date: string): Promise<DailySale[]>;
+  deleteDailySale(id: number): Promise<void>;
   submitSalesForDate(date: string): Promise<number>;
   isSalesSubmittedForDate(date: string): Promise<boolean>;
   getSubmitStatus(date: string): Promise<SalesSubmitStatus | undefined>;
@@ -182,6 +183,10 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .returning();
+  }
+
+  async deleteDailySale(id: number): Promise<void> {
+    await db.delete(dailySales).where(eq(dailySales.id, id));
   }
 
   async submitSalesForDate(date: string): Promise<number> {
