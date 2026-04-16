@@ -152,8 +152,16 @@ export class DatabaseStorage implements IStorage {
 
   async bulkUpdateDailySalesForDate(salesData: InsertDailySale[], date: string): Promise<DailySale[]> {
     if (salesData.length === 0) return [];
+    // Deduplicate by conflict key (brandNumber, size) — keep the last occurrence
+    const deduped = Array.from(
+      salesData.reduce((map, sale) => {
+        const key = `${sale.brandNumber}|${sale.size}`;
+        map.set(key, sale);
+        return map;
+      }, new Map<string, InsertDailySale>()).values()
+    );
     return await db.insert(dailySales)
-      .values(salesData.map(sale => ({ ...sale, saleDate: date, isSubmitted: false })))
+      .values(deduped.map(sale => ({ ...sale, saleDate: date, isSubmitted: false })))
       .onConflictDoUpdate({
         target: [dailySales.brandNumber, dailySales.size, dailySales.saleDate],
         set: {
