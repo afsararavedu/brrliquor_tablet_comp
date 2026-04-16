@@ -796,9 +796,7 @@ export default function Inventory() {
                             <input className="input-field" placeholder="Brand Name" value={row.brandName} onChange={(e) => handleRowChange(idx, "brandName", e.target.value)} data-testid={`input-brand-name-${globalIdx}`} />
                           </td>
                           <td className="p-2 border-b border-border">
-                            <select className="input-field" value={row.productType} onChange={(e) => handleRowChange(idx, "productType", e.target.value)} data-testid={`select-product-type-${globalIdx}`}>
-                              {PRODUCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
+                            <input className="input-field" placeholder="e.g. Beer, IML" value={row.productType} onChange={(e) => handleRowChange(idx, "productType", e.target.value)} data-testid={`input-product-type-${globalIdx}`} />
                           </td>
                           <td className="p-2 border-b border-border">
                             <select className="input-field" value={row.packType} onChange={(e) => handleRowChange(idx, "packType", e.target.value)} data-testid={`select-pack-type-${globalIdx}`}>
