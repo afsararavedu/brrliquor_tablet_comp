@@ -757,22 +757,23 @@ export default function Inventory() {
 
             <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
               <div className="overflow-x-auto table-typography">
-                <table className="w-full min-w-[1400px]">
+                <table className="w-full min-w-[1700px]">
                   <thead>
                     <tr className="bg-muted/50 border-b border-border">
                       <th className="table-header w-12">#</th>
-                      <th className="table-header w-32">Brand No</th>
-                      <th className="table-header w-48">Brand Name</th>
-                      <th className="table-header w-32">Type</th>
-                      <th className="table-header w-24">Pack</th>
+                      <th className="table-header w-32">Invoice Date</th>
+                      <th className="table-header w-48">ICDC Number</th>
+                      <th className="table-header w-28">Brand No</th>
+                      <th className="table-header w-44">Brand Name</th>
+                      <th className="table-header w-24">Type</th>
+                      <th className="table-header w-20">Pack</th>
                       <th className="table-header w-36">Size (ml)</th>
-                      <th className="table-header w-32 bg-blue-50/50">Cases Del.</th>
-                      <th className="table-header w-32 bg-blue-50/50">Btls Del.</th>
-                      <th className="table-header w-32 text-right">Rate/Case</th>
-                      <th className="table-header w-32 text-right">Rate/Btl</th>
-                      <th className="table-header w-36 text-right font-bold text-primary bg-primary/5">Total</th>
-                      <th className="table-header w-32 text-right min-h-[48px] py-2">Breakage Btl Qty</th>
-                      <th className="table-header w-48 min-h-[48px] py-2">Remarks</th>
+                      <th className="table-header w-24 bg-blue-50/50 text-right">Cases</th>
+                      <th className="table-header w-24 bg-blue-50/50 text-right">Bottles</th>
+                      <th className="table-header w-28 text-right">Rate/Case</th>
+                      <th className="table-header w-28 text-right">Rate/Btl</th>
+                      <th className="table-header w-32 text-right font-bold text-primary bg-primary/5">Total</th>
+                      <th className="table-header w-28 text-right">Breakage</th>
                       <th className="table-header w-16"></th>
                     </tr>
                   </thead>
@@ -783,47 +784,50 @@ export default function Inventory() {
                         <tr key={globalIdx} className="group hover:bg-muted/30 transition-colors">
                           <td className="table-cell text-muted-foreground text-center">{globalIdx + 1}</td>
                           <td className="p-2 border-b border-border">
-                            <input className="input-field" placeholder="Ex: 3066" value={row.brandNumber} onChange={(e) => handleRowChange(idx, "brandNumber", e.target.value)} />
+                            <input type="date" className="input-field font-mono text-sm" value={row.invoiceDate || ""} onChange={(e) => handleRowChange(idx, "invoiceDate", e.target.value)} data-testid={`input-invoice-date-${globalIdx}`} />
                           </td>
                           <td className="p-2 border-b border-border">
-                            <input className="input-field" placeholder="Brand Name" value={row.brandName} onChange={(e) => handleRowChange(idx, "brandName", e.target.value)} />
+                            <input className="input-field font-mono text-sm" placeholder="e.g. ICDC019..." value={row.icdcNumber || ""} onChange={(e) => handleRowChange(idx, "icdcNumber", e.target.value)} data-testid={`input-icdc-number-${globalIdx}`} />
                           </td>
                           <td className="p-2 border-b border-border">
-                            <select className="input-field" value={row.productType} onChange={(e) => handleRowChange(idx, "productType", e.target.value)}>
+                            <input className="input-field" placeholder="Ex: 3066" value={row.brandNumber} onChange={(e) => handleRowChange(idx, "brandNumber", e.target.value)} data-testid={`input-brand-number-${globalIdx}`} />
+                          </td>
+                          <td className="p-2 border-b border-border">
+                            <input className="input-field" placeholder="Brand Name" value={row.brandName} onChange={(e) => handleRowChange(idx, "brandName", e.target.value)} data-testid={`input-brand-name-${globalIdx}`} />
+                          </td>
+                          <td className="p-2 border-b border-border">
+                            <select className="input-field" value={row.productType} onChange={(e) => handleRowChange(idx, "productType", e.target.value)} data-testid={`select-product-type-${globalIdx}`}>
                               {PRODUCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                           </td>
                           <td className="p-2 border-b border-border">
-                            <select className="input-field" value={row.packType} onChange={(e) => handleRowChange(idx, "packType", e.target.value)}>
+                            <select className="input-field" value={row.packType} onChange={(e) => handleRowChange(idx, "packType", e.target.value)} data-testid={`select-pack-type-${globalIdx}`}>
                               {PACK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                           </td>
                           <td className="p-2 border-b border-border">
-                            <select className="input-field" value={row.packSize} onChange={(e) => handleRowChange(idx, "packSize", e.target.value)}>
+                            <select className="input-field" value={row.packSize} onChange={(e) => handleRowChange(idx, "packSize", e.target.value)} data-testid={`select-pack-size-${globalIdx}`}>
                               {PACK_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                           </td>
                           <td className="p-2 border-b border-border bg-blue-50/10">
-                            <input type="number" className="input-field text-right font-mono" value={row.qtyCasesDelivered ?? 0} onChange={(e) => handleRowChange(idx, "qtyCasesDelivered", parseInt(e.target.value, 10) || 0)} />
+                            <input type="number" className="input-field text-right font-mono" value={row.qtyCasesDelivered ?? 0} onChange={(e) => handleRowChange(idx, "qtyCasesDelivered", parseInt(e.target.value, 10) || 0)} data-testid={`input-cases-${globalIdx}`} />
                           </td>
                           <td className="p-2 border-b border-border bg-blue-50/10">
-                            <input type="number" className="input-field text-right font-mono" value={row.qtyBottlesDelivered ?? 0} onChange={(e) => handleRowChange(idx, "qtyBottlesDelivered", parseInt(e.target.value, 10) || 0)} />
+                            <input type="number" className="input-field text-right font-mono" value={row.qtyBottlesDelivered ?? 0} onChange={(e) => handleRowChange(idx, "qtyBottlesDelivered", parseInt(e.target.value, 10) || 0)} data-testid={`input-bottles-${globalIdx}`} />
                           </td>
                           <td className="p-2 border-b border-border">
-                            <input type="number" className="input-field text-right font-mono" value={row.ratePerCase || ""} onChange={(e) => handleRowChange(idx, "ratePerCase", e.target.value)} />
+                            <input type="number" className="input-field text-right font-mono" value={row.ratePerCase || ""} onChange={(e) => handleRowChange(idx, "ratePerCase", e.target.value)} data-testid={`input-rate-case-${globalIdx}`} />
                           </td>
                           <td className="p-2 border-b border-border">
-                            <input type="number" className="input-field text-right font-mono" value={row.unitRatePerBottle || ""} onChange={(e) => handleRowChange(idx, "unitRatePerBottle", e.target.value)} />
+                            <input type="number" className="input-field text-right font-mono" value={row.unitRatePerBottle || ""} onChange={(e) => handleRowChange(idx, "unitRatePerBottle", e.target.value)} data-testid={`input-rate-btl-${globalIdx}`} />
                           </td>
                           <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">₹{fmt2(row.totalAmount)}</td>
                           <td className="p-2 border-b border-border">
-                            <input type="number" className="input-field text-right font-mono" value={row.breakageBottleQty ?? 0} onChange={(e) => handleRowChange(idx, "breakageBottleQty", parseInt(e.target.value, 10) || 0)} />
-                          </td>
-                          <td className="p-2 border-b border-border">
-                            <input className="input-field" placeholder="Remarks" value={row.remarks || ""} onChange={(e) => handleRowChange(idx, "remarks", e.target.value)} />
+                            <input type="number" className="input-field text-right font-mono" value={row.breakageBottleQty ?? 0} onChange={(e) => handleRowChange(idx, "breakageBottleQty", parseInt(e.target.value, 10) || 0)} data-testid={`input-breakage-${globalIdx}`} />
                           </td>
                           <td className="p-2 border-b border-border text-center">
-                            <button onClick={() => removeRow(idx)} disabled={rows.length === 1} className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground">
+                            <button onClick={() => removeRow(idx)} disabled={rows.length === 1} className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground" data-testid={`button-remove-row-${globalIdx}`}>
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
