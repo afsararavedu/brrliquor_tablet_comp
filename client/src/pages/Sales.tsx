@@ -1308,7 +1308,7 @@ export default function Sales() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center justify-center gap-1">
                             <button onClick={() => handleEditStart(item)} title="Edit row"
                               className="p-1 rounded hover:bg-blue-100 text-blue-600 transition-colors" data-testid={`btn-edit-${item.id}`}>
                               <Pencil className="w-3.5 h-3.5" />
