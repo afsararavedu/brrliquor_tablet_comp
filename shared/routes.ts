@@ -24,7 +24,10 @@ export const api = {
     bulkUpdate: {
       method: 'POST' as const,
       path: '/api/sales/bulk',
-      input: z.array(insertDailySaleSchema),
+      input: z.object({
+        rows: z.array(insertDailySaleSchema),
+        deleteIds: z.array(z.number()).optional(),
+      }),
       responses: {
         201: z.array(z.custom<typeof dailySales.$inferSelect>()),
         400: errorSchemas.validation,

@@ -31,12 +31,12 @@ export function useSalesIsSubmitted(date: string) {
 export function useBulkUpdateSales() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ data, date }: { data: InsertDailySale[]; date?: string }) => {
+    mutationFn: async ({ data, date, deleteIds }: { data: InsertDailySale[]; date?: string; deleteIds?: number[] }) => {
       const url = date ? `${api.sales.bulkUpdate.path}?date=${date}` : api.sales.bulkUpdate.path;
       const res = await fetch(url, {
         method: api.sales.bulkUpdate.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ rows: data, deleteIds: deleteIds ?? [] }),
       });
       
       if (!res.ok) {

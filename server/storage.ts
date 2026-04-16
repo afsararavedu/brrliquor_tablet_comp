@@ -31,6 +31,7 @@ export interface IStorage {
   bulkUpdateDailySales(sales: InsertDailySale[]): Promise<DailySale[]>;
   bulkUpdateDailySalesForDate(sales: InsertDailySale[], date: string): Promise<DailySale[]>;
   deleteDailySale(id: number): Promise<void>;
+  deleteAndRevertSales(ids: number[], date: string): Promise<void>;
   submitSalesForDate(date: string): Promise<number>;
   isSalesSubmittedForDate(date: string): Promise<boolean>;
   getSubmitStatus(date: string): Promise<SalesSubmitStatus | undefined>;
@@ -53,6 +54,7 @@ export interface IStorage {
   getDailyStockByDate(date: string): Promise<DailyStock[]>;
   getMostRecentDailyStockBefore(date: string): Promise<DailyStock[]>;
   upsertDailyStockSnapshot(date: string): Promise<void>;
+  replaceFullDailyStockSnapshot(date: string): Promise<void>;
 
   // Sales MRP Overrides
   getSalesMrpDetails(): Promise<SalesMrpDetail[]>;
@@ -187,6 +189,78 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDailySale(id: number): Promise<void> {
     await db.delete(dailySales).where(eq(dailySales.id, id));
+  }
+
+  async deleteAndRevertSales(ids: number[], date: string): Promise<void> {
+    if (ids.length === 0) return;
+
+    // 1. Capture the rows we are about to delete (need brand info for stock revert)
+    const toDelete = await db.select().from(dailySales).where(
+      sql`id = ANY(ARRAY[${sql.join(ids.map(id => sql`${id}`), sql`, `)}]::int[])`
+    );
+
+    // 2. Delete from daily_sales
+    await db.delete(dailySales).where(
+      sql`id = ANY(ARRAY[${sql.join(ids.map(id => sql`${id}`), sql`, `)}]::int[])`
+    );
+
+    if (toDelete.length === 0) return;
+
+    // 3. Revert stock_details for deleted brands: use previous day's daily_stock if available,
+    //    otherwise fall back to the opening balance stored in the deleted row.
+    const prevDate = (() => {
+      const d = new Date(date);
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().split('T')[0];
+    })();
+    const prevSnapshot = await db.select().from(dailyStock).where(eq(dailyStock.date, prevDate));
+
+    const normStr = (s: string) => (s ?? '').trim().toLowerCase().replace(/\s+/g, '');
+    const sizeMatch = (a: string, b: string) => {
+      const na = normStr(a), nb = normStr(b);
+      return na === nb || na.includes(nb) || nb.includes(na);
+    };
+
+    const allStock = await db.select().from(stockDetails);
+
+    for (const sale of toDelete) {
+      // Find matching stock_details row
+      const matchedStock = allStock.find(s =>
+        s.brandNumber === sale.brandNumber &&
+        normStr(s.brandName) === normStr(sale.brandName) &&
+        sizeMatch(s.size ?? '', sale.size)
+      ) ?? allStock.find(s =>
+        s.brandNumber === sale.brandNumber &&
+        sizeMatch(s.size ?? '', sale.size)
+      );
+
+      if (!matchedStock) continue;
+
+      // Find matching previous-day snapshot
+      const prevRow = prevSnapshot.find(p =>
+        p.brandNumber === sale.brandNumber &&
+        normStr(p.brandName) === normStr(sale.brandName) &&
+        sizeMatch(p.size ?? '', sale.size)
+      ) ?? prevSnapshot.find(p =>
+        p.brandNumber === sale.brandNumber &&
+        sizeMatch(p.size ?? '', sale.size)
+      );
+
+      // Revert values: prefer prev-day snapshot, else use opening balance from deleted row
+      const revertBtls = prevRow ? (prevRow.totalStockBottles ?? 0) : (sale.openingBalanceBottles ?? 0);
+      const revertCases = prevRow ? (prevRow.stockInCases ?? 0) : 0;
+      const revertBottles = prevRow ? (prevRow.stockInBottles ?? 0) : 0;
+      const mrp = parseFloat(String(matchedStock.mrp ?? '0')) || 0;
+
+      await db.update(stockDetails)
+        .set({
+          stockInCases: revertCases,
+          stockInBottles: revertBottles,
+          totalStockBottles: revertBtls,
+          totalStockValue: (revertBtls * mrp).toFixed(2),
+        })
+        .where(eq(stockDetails.id, matchedStock.id));
+    }
   }
 
   async submitSalesForDate(date: string): Promise<number> {
@@ -726,6 +800,32 @@ export class DatabaseStorage implements IStorage {
           breakage: sql`excluded.breakage`,
         },
       });
+  }
+
+  async replaceFullDailyStockSnapshot(date: string): Promise<void> {
+    // Full replace: delete all existing rows for this date, then insert fresh from daily_sales.
+    // This ensures deleted sales rows are also removed from the daily_stock snapshot.
+    const dateSales = await db.select().from(dailySales).where(eq(dailySales.saleDate, date));
+
+    // Delete ALL existing snapshot rows for this date
+    await db.delete(dailyStock).where(eq(dailyStock.date, date));
+
+    if (dateSales.length === 0) return;
+
+    // Re-insert from current daily_sales state
+    await db.insert(dailyStock).values(dateSales.map(sale => ({
+      brandNumber: sale.brandNumber,
+      brandName: sale.brandName,
+      size: sale.size,
+      quantityPerCase: sale.quantityPerCase,
+      stockInCases: sale.closingBalanceCases ?? 0,
+      stockInBottles: sale.closingBalanceBottles ?? 0,
+      totalStockBottles: sale.totalClosingStock ?? 0,
+      mrp: sale.mrp || '0',
+      totalStockValue: ((sale.totalClosingStock ?? 0) * parseFloat(String(sale.mrp || '0'))).toFixed(2),
+      breakage: sale.breakageBottles ?? 0,
+      date: date,
+    })));
   }
 
   async getSalesMrpDetails(): Promise<SalesMrpDetail[]> {

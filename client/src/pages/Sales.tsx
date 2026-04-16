@@ -213,6 +213,8 @@ export default function Sales() {
   const [editingRowId, setEditingRowId] = useState<number | null>(null);
   const [editRowData, setEditRowData] = useState<Partial<DailySale>>({});
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  // Rows pending deletion — applied when Save Sales is clicked (not immediately)
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set());
 
   const generateCSV = useCallback((data: DailySale[], date: string) => {
     const headers = [
@@ -529,6 +531,10 @@ export default function Sales() {
     setSearchTerm("");
     setUploadResult(null);
     setTouchedClosingIds(new Set());
+    setPendingDeleteIds(new Set());
+    setEditingRowId(null);
+    setEditRowData({});
+    setDeleteConfirmId(null);
   }, [selectedDate]);
 
   const handleInputChange = (
@@ -635,11 +641,13 @@ export default function Sales() {
     // Reflect the corrected values in the UI immediately
     setLocalSales(dataToSave);
 
-    updateSales({ data: dataToSave, date: selectedDate }, {
+    const deleteIdsArray = Array.from(pendingDeleteIds);
+    updateSales({ data: dataToSave, date: selectedDate, deleteIds: deleteIdsArray }, {
       onSuccess: () => {
+        setPendingDeleteIds(new Set());
         toast({
           title: "Sales Saved",
-          description: `Sales data for ${selectedDate} has been successfully saved.`,
+          description: `Sales data for ${selectedDate} has been successfully saved${deleteIdsArray.length > 0 ? ` (${deleteIdsArray.length} row${deleteIdsArray.length > 1 ? "s" : ""} deleted)` : ""}.`,
           className: "bg-green-50 border-green-200 text-green-800",
         });
       },
@@ -745,16 +753,18 @@ export default function Sales() {
   };
 
   // --- Delete row handlers ---
-  const handleDeleteConfirm = async (id: number) => {
-    try {
-      await apiRequest("DELETE", `/api/sales/${id}`);
-      setLocalSales((prev) => prev.filter((row) => row.id !== id));
-      setTouchedClosingIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
-      setDeleteConfirmId(null);
-      toast({ title: "Row Deleted", description: "Sales row has been removed.", className: "bg-green-50 border-green-200 text-green-800" });
-    } catch {
-      toast({ title: "Delete Failed", description: "Could not delete this row.", variant: "destructive" });
-    }
+  // Deletion is deferred to Save Sales — we just hide the row locally and track IDs
+  const handleDeleteConfirm = (id: number) => {
+    setPendingDeleteIds((prev) => new Set(prev).add(id));
+    setLocalSales((prev) => prev.filter((row) => row.id !== id));
+    setTouchedClosingIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
+    setDeleteConfirmId(null);
+    toast({
+      title: "Row Removed",
+      description: "Row marked for deletion. Click 'Save Sales' to apply all changes to the database.",
+      className: "bg-amber-50 border-amber-200 text-amber-800",
+      duration: 5000,
+    });
   };
 
   const filteredSales = localSales.filter(

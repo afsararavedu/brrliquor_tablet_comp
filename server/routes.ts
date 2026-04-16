@@ -958,12 +958,17 @@ export async function registerRoutes(
 
   app.post(api.sales.bulkUpdate.path, async (req, res) => {
     try {
-      const input = api.sales.bulkUpdate.input.parse(req.body);
+      const { rows: input, deleteIds } = api.sales.bulkUpdate.input.parse(req.body);
       const date = req.query.date as string | undefined;
       const isAdminUser = (req.user as any)?.role === "admin";
 
       // Resolve effective date: use provided date or default to today
       const effectiveDate = date || new Date().toISOString().split('T')[0];
+
+      // Delete pending-delete rows first (capture their data before deleting for stock revert)
+      if (deleteIds && deleteIds.length > 0) {
+        await storage.deleteAndRevertSales(deleteIds, effectiveDate);
+      }
 
       let result: DailySale[];
       if (date) {
@@ -981,16 +986,15 @@ export async function registerRoutes(
         result = await storage.bulkUpdateDailySales(input);
       }
 
-      // Sync stock for the saved date: decrease stock_in_cases / stock_in_bottles
-      // by the closing balance values from this date's daily_sales.
+      // Sync stock for the saved date — updates stock_details from current daily_sales closing values
       const stockSync = await storage.syncDailySalesToStock(effectiveDate);
       console.log(
         `Stock sync from sales save (${effectiveDate}): ${stockSync.updatedStockCount} stock rows updated`,
       );
 
-      // Always snapshot closing stock to daily_stock for the saved date
-      await storage.upsertDailyStockSnapshot(effectiveDate);
-      console.log(`Daily stock snapshot saved for date ${effectiveDate}`);
+      // Full-replace daily_stock snapshot for the date so deleted rows are removed from it too
+      await storage.replaceFullDailyStockSnapshot(effectiveDate);
+      console.log(`Daily stock snapshot (full replace) saved for date ${effectiveDate}`);
 
       res.status(201).json(result);
     } catch (err) {
