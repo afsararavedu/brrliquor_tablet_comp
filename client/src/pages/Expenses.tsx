@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -255,31 +256,33 @@ export default function Expenses() {
               {/* Type */}
               <div className="space-y-1">
                 <Label className="text-xs">Type</Label>
-                <select
-                  value={formType}
-                  onChange={e => setFormType(e.target.value as "expense" | "income")}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  data-testid="select-entry-type"
-                >
-                  <option value="expense">Additional Expense</option>
-                  <option value="income">Additional Income</option>
-                </select>
+                <Select value={formType} onValueChange={v => setFormType(v as "expense" | "income")} data-testid="select-entry-type">
+                  <SelectTrigger className="h-9" data-testid="select-entry-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="expense">Additional Expense</SelectItem>
+                    <SelectItem value="income">Additional Income</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Category */}
               <div className="space-y-1">
                 <Label className="text-xs">Category</Label>
-                <select
-                  value={formCategory}
-                  onChange={e => setFormCategory(e.target.value)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  data-testid="select-entry-category"
-                >
-                  <option value="">Select category…</option>
-                  {filteredCategories.map(c => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
+                <Select value={formCategory || "__none__"} onValueChange={v => setFormCategory(v === "__none__" ? "" : v)} data-testid="select-entry-category">
+                  <SelectTrigger className="h-9" data-testid="select-entry-category">
+                    <SelectValue placeholder="Select category…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredCategories.length === 0 && (
+                      <SelectItem value="__none__" disabled>No categories yet</SelectItem>
+                    )}
+                    {filteredCategories.map(c => (
+                      <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Amount */}
@@ -299,14 +302,14 @@ export default function Expenses() {
               {/* Payment Mode */}
               <div className="space-y-1">
                 <Label className="text-xs">Payment Mode</Label>
-                <select
-                  value={formPaymentMode}
-                  onChange={e => setFormPaymentMode(e.target.value as any)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  data-testid="select-payment-mode"
-                >
-                  {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <Select value={formPaymentMode} onValueChange={v => setFormPaymentMode(v as any)} data-testid="select-payment-mode">
+                  <SelectTrigger className="h-9" data-testid="select-payment-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Description */}
@@ -367,14 +370,15 @@ export default function Expenses() {
                         {/* Type */}
                         <td className="px-4 py-2.5">
                           {isEditing ? (
-                            <select
-                              value={editData.type}
-                              onChange={e => setEditData(p => ({ ...p, type: e.target.value as any, category: "" }))}
-                              className="h-8 rounded border border-input bg-background px-2 text-sm"
-                            >
-                              <option value="expense">Expense</option>
-                              <option value="income">Income</option>
-                            </select>
+                            <Select value={editData.type} onValueChange={v => setEditData(p => ({ ...p, type: v as any, category: "" }))}>
+                              <SelectTrigger className="h-8 text-sm w-28">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="expense">Expense</SelectItem>
+                                <SelectItem value="income">Income</SelectItem>
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${entry.type === "expense" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
                               {entry.type === "expense" ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
@@ -386,16 +390,16 @@ export default function Expenses() {
                         {/* Category */}
                         <td className="px-4 py-2.5">
                           {isEditing ? (
-                            <select
-                              value={editData.category}
-                              onChange={e => setEditData(p => ({ ...p, category: e.target.value }))}
-                              className="h-8 rounded border border-input bg-background px-2 text-sm"
-                            >
-                              <option value="">Select…</option>
-                              {(isExpense ? expenseCategories : incomeCategories).map(c => (
-                                <option key={c.id} value={c.name}>{c.name}</option>
-                              ))}
-                            </select>
+                            <Select value={editData.category || "__none__"} onValueChange={v => setEditData(p => ({ ...p, category: v === "__none__" ? "" : v }))}>
+                              <SelectTrigger className="h-8 text-sm w-36">
+                                <SelectValue placeholder="Select…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(isExpense ? expenseCategories : incomeCategories).map(c => (
+                                  <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <span className="font-medium">{entry.category}</span>
                           )}
@@ -422,13 +426,14 @@ export default function Expenses() {
                         {/* Payment Mode */}
                         <td className="px-4 py-2.5">
                           {isEditing ? (
-                            <select
-                              value={editData.paymentMode}
-                              onChange={e => setEditData(p => ({ ...p, paymentMode: e.target.value as any }))}
-                              className="h-8 rounded border border-input bg-background px-2 text-sm"
-                            >
-                              {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
+                            <Select value={editData.paymentMode} onValueChange={v => setEditData(p => ({ ...p, paymentMode: v as any }))}>
+                              <SelectTrigger className="h-8 text-sm w-24">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <span className="px-2 py-0.5 rounded bg-muted text-xs font-medium">{entry.paymentMode}</span>
                           )}
