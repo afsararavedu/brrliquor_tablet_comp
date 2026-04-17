@@ -39,7 +39,7 @@ export interface IStorage {
   // Orders
   getOrders(): Promise<Order[]>;
   bulkCreateOrders(orders: InsertOrder[]): Promise<Order[]>;
-  updateOrder(id: number, data: Partial<InsertOrder>): Promise<Order>;
+  updateOrder(id: number, data: Record<string, any>): Promise<Order>;
   deleteOrder(id: number): Promise<void>;
   getLatestOrderInvoiceDate(): Promise<string | null>;
   getEarliestOrderInvoiceDate(): Promise<string | null>;
@@ -366,21 +366,20 @@ export class DatabaseStorage implements IStorage {
     return await db.insert(orders).values(withTotalBottles).returning();
   }
 
-  async updateOrder(id: number, data: Partial<InsertOrder>): Promise<Order> {
-    const packSize = data.packSize;
-    let totalBottles: number | undefined;
-    if (packSize !== undefined || data.qtyCasesDelivered !== undefined || data.qtyBottlesDelivered !== undefined) {
-      const current = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-      if (current.length > 0) {
-        const merged = { ...current[0], ...data };
-        const packParts = (merged.packSize || "").split("/").map((s: string) => s.trim());
-        const qtyPerCase = packParts.length > 0 ? parseInt(packParts[0], 10) : 0;
-        totalBottles = (isNaN(qtyPerCase) ? 0 : qtyPerCase) * (merged.qtyCasesDelivered ?? 0) + (merged.qtyBottlesDelivered ?? 0);
-      }
-    }
-    const updateData = totalBottles !== undefined ? { ...data, totalBottles } : data;
-    const result = await db.update(orders).set(updateData).where(eq(orders.id, id)).returning();
-    if (result.length === 0) throw new Error(`Order ${id} not found`);
+  async updateOrder(id: number, data: Record<string, any>): Promise<Order> {
+    // Strip fields that must not be overwritten (id, auto timestamps, flags, computed columns)
+    const { id: _id, createdAt: _ca, dataUpdated: _du, totalBottles: _tb, ...fields } = data;
+
+    const current = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    if (current.length === 0) throw new Error(`Order ${id} not found`);
+    const merged = { ...current[0], ...fields };
+
+    // Recompute totalBottles from packSize / qty
+    const packParts = (merged.packSize || "").split("/").map((s: string) => s.trim());
+    const qtyPerCase = parseInt(packParts[0], 10);
+    const totalBottles = (isNaN(qtyPerCase) ? 0 : qtyPerCase) * (merged.qtyCasesDelivered ?? 0) + (merged.qtyBottlesDelivered ?? 0);
+
+    const result = await db.update(orders).set({ ...fields, totalBottles }).where(eq(orders.id, id)).returning();
     return result[0];
   }
 
