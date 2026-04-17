@@ -65,6 +65,15 @@ BRR Liquor Soft (BRR IT Solutions) is a full-stack sales management dashboard ap
 ### Sales Calculations
 - `Final Closing Balance` = `Total Closing Stock (Bottles)` x `MRP` (or sales_mrp if override exists)
 
+### Expenses & Income Tracking
+- New `/expenses` page accessible to both Admin and Employee via sidebar
+- `expense_categories` table: Admin-managed list of Expense and Income categories
+- `daily_expenses` table: Date-wise entries with type (expense/income), category, amount, description, payment_mode (Cash/UPI/Bank), submittedBy
+- Summary cards on page show: Sales Total (from daily_sales), Expenses Total, Income Total, Net Balance
+- Both roles can add entries; only Admin can edit or delete
+- Admin-only "Manage Categories" tab lets Admin add/remove expense and income category names
+- API endpoints: GET/POST /api/expense-categories, DELETE /api/expense-categories/:id, GET/POST /api/daily-expenses, PUT/DELETE /api/daily-expenses/:id
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

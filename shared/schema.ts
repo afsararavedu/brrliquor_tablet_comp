@@ -201,6 +201,35 @@ export const insertSalesMrpDetailSchema = createInsertSchema(salesMrpDetails).om
 export type SalesMrpDetail = typeof salesMrpDetails.$inferSelect;
 export type InsertSalesMrpDetail = z.infer<typeof insertSalesMrpDetailSchema>;
 
+// Expense categories — configurable list of expense/income types managed by Admin
+export const expenseCategories = pgTable("expense_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type").notNull(), // "expense" | "income"
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertExpenseCategorySchema = createInsertSchema(expenseCategories).omit({ id: true, createdAt: true });
+export type ExpenseCategory = typeof expenseCategories.$inferSelect;
+export type InsertExpenseCategory = z.infer<typeof insertExpenseCategorySchema>;
+
+// Daily expenses — actual expense/income entries per day
+export const dailyExpenses = pgTable("daily_expenses", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  type: text("type").notNull(), // "expense" | "income"
+  category: text("category").notNull(),
+  amount: numeric("amount").notNull().default('0'),
+  description: text("description"),
+  paymentMode: text("payment_mode").notNull().default("Cash"), // "Cash" | "UPI" | "Bank"
+  submittedBy: text("submitted_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDailyExpenseSchema = createInsertSchema(dailyExpenses).omit({ id: true, createdAt: true });
+export type DailyExpense = typeof dailyExpenses.$inferSelect;
+export type InsertDailyExpense = z.infer<typeof insertDailyExpenseSchema>;
+
 // Request types
 export type BulkCreateDailySalesRequest = InsertDailySale[];
 export type BulkCreateOrdersRequest = InsertOrder[];

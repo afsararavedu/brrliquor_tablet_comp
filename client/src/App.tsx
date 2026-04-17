@@ -12,6 +12,7 @@ import Sales from "@/pages/Sales";
 import Stock from "@/pages/Stock";
 import Inventory from "@/pages/Inventory";
 import Reports from "@/pages/Reports";
+import Expenses from "@/pages/Expenses";
 import AuthPage from "@/pages/AuthPage";
 import ResetPassword from "@/pages/ResetPassword";
 import AboutUs from "@/pages/AboutUs";
@@ -53,6 +54,9 @@ function Router() {
               </Route>
               <Route path="/inventory">
                 <ProtectedRoute component={Inventory} path="/inventory" />
+              </Route>
+              <Route path="/expenses">
+                <ProtectedRoute component={Expenses} path="/expenses" />
               </Route>
               <Route path="/reports">
                 <ProtectedRoute component={Reports} path="/reports" role="admin" />

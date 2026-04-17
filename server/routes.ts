@@ -1654,4 +1654,91 @@ async function seedDatabase() {
     });
   }
 
+  // ─── Expense Categories ───────────────────────────────────────────────────
+  app.get("/api/expense-categories", async (req, res) => {
+    const type = req.query.type as string | undefined;
+    const categories = await storage.getExpenseCategories(type);
+    res.json(categories);
+  });
+
+  app.post("/api/expense-categories", async (req, res) => {
+    const isAdmin = (req.user as any)?.role === "admin";
+    if (!isAdmin) return res.status(403).json({ message: "Admin only" });
+    const { name, type } = req.body;
+    if (!name || !type) return res.status(400).json({ message: "name and type are required" });
+    if (!["expense", "income"].includes(type)) return res.status(400).json({ message: "type must be expense or income" });
+    const trimmed = (name as string).trim();
+    if (!trimmed) return res.status(400).json({ message: "name cannot be empty" });
+    try {
+      const created = await storage.createExpenseCategory({ name: trimmed, type });
+      res.json(created);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/expense-categories/:id", async (req, res) => {
+    const isAdmin = (req.user as any)?.role === "admin";
+    if (!isAdmin) return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+    const deleted = await storage.deleteExpenseCategory(id);
+    if (!deleted) return res.status(404).json({ message: "Not found" });
+    res.json({ success: true });
+  });
+
+  // ─── Daily Expenses ───────────────────────────────────────────────────────
+  app.get("/api/daily-expenses", async (req, res) => {
+    const date = req.query.date as string;
+    if (!date) return res.status(400).json({ message: "date is required" });
+    const entries = await storage.getDailyExpenses(date);
+    res.json(entries);
+  });
+
+  app.post("/api/daily-expenses", async (req, res) => {
+    const { date, type, category, amount, description, paymentMode } = req.body;
+    if (!date || !type || !category || amount === undefined || !paymentMode)
+      return res.status(400).json({ message: "date, type, category, amount, and paymentMode are required" });
+    if (!["expense", "income"].includes(type)) return res.status(400).json({ message: "type must be expense or income" });
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount < 0) return res.status(400).json({ message: "amount must be a non-negative number" });
+    const submittedBy = (req.user as any)?.username || "unknown";
+    try {
+      const created = await storage.createDailyExpense({ date, type, category, amount: String(parsedAmount), description: description || null, paymentMode, submittedBy });
+      res.json(created);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/daily-expenses/:id", async (req, res) => {
+    const isAdmin = (req.user as any)?.role === "admin";
+    if (!isAdmin) return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+    const { type, category, amount, description, paymentMode } = req.body;
+    const updates: Record<string, any> = {};
+    if (type !== undefined) updates.type = type;
+    if (category !== undefined) updates.category = category;
+    if (amount !== undefined) updates.amount = String(parseFloat(amount));
+    if (description !== undefined) updates.description = description;
+    if (paymentMode !== undefined) updates.paymentMode = paymentMode;
+    try {
+      const updated = await storage.updateDailyExpense(id, updates);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/daily-expenses/:id", async (req, res) => {
+    const isAdmin = (req.user as any)?.role === "admin";
+    if (!isAdmin) return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+    const deleted = await storage.deleteDailyExpense(id);
+    if (!deleted) return res.status(404).json({ message: "Not found" });
+    res.json({ success: true });
+  });
+
 }

@@ -7,7 +7,7 @@ import {
   BarChart3, 
   CreditCard, 
   Calendar,
-  Settings,
+  Receipt,
   LogOut,
   Phone,
   Info
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { label: "Sales", href: "/sales", icon: ShoppingCart },
   { label: "Inventory", href: "/inventory", icon: FileText },
   { label: "Stock", href: "/stock", icon: Package, role: "admin" },
+  { label: "Expenses", href: "/expenses", icon: Receipt },
   { label: "Reports", href: "/reports", icon: BarChart3, role: "admin" },
   { label: "Credits", href: "/credits", icon: CreditCard, role: "admin" },
   { label: "Calendar", href: "/calendar", icon: Calendar, role: "admin" },

@@ -1,6 +1,7 @@
 
 import { 
   dailySales, orders, stockDetails, users, shopDetails, salesSubmitStatus, dailyStock, salesMrpDetails,
+  expenseCategories, dailyExpenses,
   type DailySale, type InsertDailySale,
   type Order, type InsertOrder,
   type StockDetail, type InsertStockDetail,
@@ -9,6 +10,8 @@ import {
   type SalesSubmitStatus,
   type DailyStock,
   type SalesMrpDetail, type InsertSalesMrpDetail,
+  type ExpenseCategory, type InsertExpenseCategory,
+  type DailyExpense, type InsertDailyExpense,
 } from "@shared/schema";
 import { eq, and, sql, desc, asc, inArray, lt } from "drizzle-orm";
 import { pool, db } from "./db";
@@ -69,6 +72,17 @@ export interface IStorage {
   getShopDetails(): Promise<ShopDetail[]>;
   getShopDetailByLicenseNo(licenseNo: string): Promise<ShopDetail | undefined>;
   getShopDetailByIcdcNumber(icdcNumber: string): Promise<ShopDetail | undefined>;
+
+  // Expense Categories
+  getExpenseCategories(type?: string): Promise<ExpenseCategory[]>;
+  createExpenseCategory(data: InsertExpenseCategory): Promise<ExpenseCategory>;
+  deleteExpenseCategory(id: number): Promise<boolean>;
+
+  // Daily Expenses
+  getDailyExpenses(date: string): Promise<DailyExpense[]>;
+  createDailyExpense(data: InsertDailyExpense): Promise<DailyExpense>;
+  updateDailyExpense(id: number, data: Partial<InsertDailyExpense>): Promise<DailyExpense>;
+  deleteDailyExpense(id: number): Promise<boolean>;
 
   sessionStore: session.Store;
 }
@@ -914,6 +928,44 @@ export class DatabaseStorage implements IStorage {
   async getShopDetailByIcdcNumber(icdcNumber: string): Promise<ShopDetail | undefined> {
     const [detail] = await db.select().from(shopDetails).where(eq(shopDetails.icdcNumber, icdcNumber)).limit(1);
     return detail;
+  }
+
+  // Expense Categories
+  async getExpenseCategories(type?: string): Promise<ExpenseCategory[]> {
+    if (type) {
+      return await db.select().from(expenseCategories).where(eq(expenseCategories.type, type)).orderBy(asc(expenseCategories.name));
+    }
+    return await db.select().from(expenseCategories).orderBy(asc(expenseCategories.type), asc(expenseCategories.name));
+  }
+
+  async createExpenseCategory(data: InsertExpenseCategory): Promise<ExpenseCategory> {
+    const [created] = await db.insert(expenseCategories).values(data).returning();
+    return created;
+  }
+
+  async deleteExpenseCategory(id: number): Promise<boolean> {
+    const result = await db.delete(expenseCategories).where(eq(expenseCategories.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Daily Expenses
+  async getDailyExpenses(date: string): Promise<DailyExpense[]> {
+    return await db.select().from(dailyExpenses).where(eq(dailyExpenses.date, date)).orderBy(asc(dailyExpenses.createdAt));
+  }
+
+  async createDailyExpense(data: InsertDailyExpense): Promise<DailyExpense> {
+    const [created] = await db.insert(dailyExpenses).values(data).returning();
+    return created;
+  }
+
+  async updateDailyExpense(id: number, data: Partial<InsertDailyExpense>): Promise<DailyExpense> {
+    const [updated] = await db.update(dailyExpenses).set(data).where(eq(dailyExpenses.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDailyExpense(id: number): Promise<boolean> {
+    const result = await db.delete(dailyExpenses).where(eq(dailyExpenses.id, id)).returning();
+    return result.length > 0;
   }
 }
 
