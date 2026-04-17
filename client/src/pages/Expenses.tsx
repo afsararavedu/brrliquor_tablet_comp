@@ -517,10 +517,13 @@ export default function Expenses() {
               <div className="border rounded-xl p-5 bg-card space-y-4">
                 <h3 className="font-semibold flex items-center gap-2 text-red-600">
                   <TrendingDown className="w-4 h-4" /> Expense Categories
+                  <span className="ml-auto text-xs font-normal text-muted-foreground">{expenseCategories.length} item{expenseCategories.length !== 1 ? "s" : ""}</span>
                 </h3>
+
+                {/* Add input */}
                 <div className="flex gap-2">
                   <Input
-                    placeholder="e.g. Rent, Electricity…"
+                    placeholder="Type a category name and press + or Enter"
                     value={newCatExpense}
                     onChange={e => setNewCatExpense(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (newCatExpense.trim()) addCategory.mutate({ name: newCatExpense.trim(), type: "expense" }); } }}
@@ -535,27 +538,44 @@ export default function Expenses() {
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
-                <div className="space-y-1 max-h-60 overflow-y-auto">
-                  {expenseCategories.length === 0 && <p className="text-sm text-muted-foreground italic">No categories yet.</p>}
-                  {expenseCategories.map(c => (
-                    <div key={c.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 group" data-testid={`item-expense-category-${c.id}`}>
-                      <span className="text-sm font-medium">{c.name}</span>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-red-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => deleteCategory.mutate(c.id)} data-testid={`button-delete-category-${c.id}`}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+
+                {/* Category chips — always fully visible, no scroll */}
+                {expenseCategories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No expense categories yet. Add one above.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {expenseCategories.map(c => (
+                      <div
+                        key={c.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-800 text-sm font-medium"
+                        data-testid={`item-expense-category-${c.id}`}
+                      >
+                        {c.name}
+                        <button
+                          onClick={() => deleteCategory.mutate(c.id)}
+                          className="ml-0.5 rounded-full p-0.5 hover:bg-red-200 transition-colors"
+                          title="Remove"
+                          data-testid={`button-delete-category-${c.id}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Income categories */}
               <div className="border rounded-xl p-5 bg-card space-y-4">
                 <h3 className="font-semibold flex items-center gap-2 text-green-600">
                   <TrendingUp className="w-4 h-4" /> Income Categories
+                  <span className="ml-auto text-xs font-normal text-muted-foreground">{incomeCategories.length} item{incomeCategories.length !== 1 ? "s" : ""}</span>
                 </h3>
+
+                {/* Add input */}
                 <div className="flex gap-2">
                   <Input
-                    placeholder="e.g. Misc Income, Advance…"
+                    placeholder="Type a category name and press + or Enter"
                     value={newCatIncome}
                     onChange={e => setNewCatIncome(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (newCatIncome.trim()) addCategory.mutate({ name: newCatIncome.trim(), type: "income" }); } }}
@@ -570,17 +590,31 @@ export default function Expenses() {
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
-                <div className="space-y-1 max-h-60 overflow-y-auto">
-                  {incomeCategories.length === 0 && <p className="text-sm text-muted-foreground italic">No categories yet.</p>}
-                  {incomeCategories.map(c => (
-                    <div key={c.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 group" data-testid={`item-income-category-${c.id}`}>
-                      <span className="text-sm font-medium">{c.name}</span>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-red-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => deleteCategory.mutate(c.id)} data-testid={`button-delete-category-${c.id}`}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+
+                {/* Category chips — always fully visible, no scroll */}
+                {incomeCategories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No income categories yet. Add one above.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {incomeCategories.map(c => (
+                      <div
+                        key={c.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 border border-green-200 text-green-800 text-sm font-medium"
+                        data-testid={`item-income-category-${c.id}`}
+                      >
+                        {c.name}
+                        <button
+                          onClick={() => deleteCategory.mutate(c.id)}
+                          className="ml-0.5 rounded-full p-0.5 hover:bg-green-200 transition-colors"
+                          title="Remove"
+                          data-testid={`button-delete-category-${c.id}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>
