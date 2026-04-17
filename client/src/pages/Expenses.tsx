@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, parse, subDays } from "date-fns";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -73,10 +73,22 @@ export default function Expenses() {
   const [selectedDate, setSelectedDate] = useState(getTodayLocal());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
+  // Earliest invoice date — same floor used by Sales page
+  const { data: earliestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
+    queryKey: ["/api/orders/earliest-invoice-date"],
+  });
+  const earliestOrderDate = earliestOrderDateData?.invoiceDate
+    ? parse(earliestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
+    : new Date(2020, 0, 1);
+  const earliestOrderDateStr = earliestOrderDateData?.invoiceDate ?? "2020-01-01";
+
   function goDay(delta: number) {
     const d = parseDateLocal(selectedDate);
     d.setDate(d.getDate() + delta);
-    setSelectedDate(formatDateLocal(d));
+    const next = formatDateLocal(d);
+    const today = getTodayLocal();
+    if (next < earliestOrderDateStr || next > today) return;
+    setSelectedDate(next);
   }
 
   // ── Form state ──────────────────────────────────────────────────────────────
@@ -204,9 +216,15 @@ export default function Expenses() {
           <p className="text-sm text-muted-foreground mt-0.5">Track daily expenses and additional income</p>
         </div>
 
-        {/* Date Picker — same pattern as Sales page */}
+        {/* Date Picker — floored at earliest invoice date, same as Sales page */}
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" onClick={() => goDay(-1)} data-testid="button-prev-day">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => goDay(-1)}
+            disabled={selectedDate <= earliestOrderDateStr}
+            data-testid="button-prev-day"
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
@@ -221,11 +239,27 @@ export default function Expenses() {
                 mode="single"
                 selected={parseDateLocal(selectedDate)}
                 onSelect={(d) => { if (d) { setSelectedDate(formatDateLocal(d)); setDatePickerOpen(false); } }}
+                fromDate={earliestOrderDate}
+                toDate={new Date()}
+                disabled={(date) => {
+                  const floor = new Date(earliestOrderDate);
+                  floor.setHours(0, 0, 0, 0);
+                  if (date < floor) return true;
+                  const today = new Date();
+                  today.setHours(23, 59, 59, 999);
+                  return date > today;
+                }}
                 initialFocus
               />
             </PopoverContent>
           </Popover>
-          <Button variant="outline" size="icon" onClick={() => goDay(1)} data-testid="button-next-day">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => goDay(1)}
+            disabled={selectedDate >= getTodayLocal()}
+            data-testid="button-next-day"
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
