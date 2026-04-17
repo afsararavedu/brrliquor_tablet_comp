@@ -1122,6 +1122,30 @@ export async function registerRoutes(
     }
   });
 
+  // Update a single order
+  app.put("/api/orders/:id", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid order id" });
+    try {
+      const updated = await storage.updateOrder(id, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to update order" });
+    }
+  });
+
+  // Delete a single order
+  app.delete("/api/orders/:id", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid order id" });
+    try {
+      await storage.deleteOrder(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to delete order" });
+    }
+  });
+
   // Stock
   app.get(api.stock.list.path, async (req, res) => {
     const stock = await storage.getStockDetails();

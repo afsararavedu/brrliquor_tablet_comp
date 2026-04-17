@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useOrders, useBulkCreateOrders, useUploadFile } from "@/hooks/use-orders";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -117,6 +117,23 @@ export default function Inventory() {
   const { data: savedOrders, isLoading: isLoadingOrders } = useOrders(appliedFilters);
   const [savedPage, setSavedPage] = useState(1);
   const [savedPageSize, setSavedPageSize] = useState(10);
+
+  // Saved Orders inline-edit / delete state
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const [editOrderData, setEditOrderData] = useState<Partial<Order>>({});
+  const [deleteConfirmOrderId, setDeleteConfirmOrderId] = useState<number | null>(null);
+  const [dirtyOrderMap, setDirtyOrderMap] = useState<Map<number, Order>>(new Map());
+  const [pendingDeleteOrderIds, setPendingDeleteOrderIds] = useState<Set<number>>(new Set());
+  const [isUpdatingOrders, setIsUpdatingOrders] = useState(false);
+
+  // Reset dirty/pending state when filters change (new data loaded)
+  useEffect(() => {
+    setDirtyOrderMap(new Map());
+    setPendingDeleteOrderIds(new Set());
+    setEditingOrderId(null);
+    setEditOrderData({});
+    setDeleteConfirmOrderId(null);
+  }, [appliedFilters]);
 
   // Shop Details Dialog State
   const [showShopDetail, setShowShopDetail] = useState(false);
@@ -342,6 +359,81 @@ export default function Inventory() {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Exported", description: `${savedOrders.length} orders exported to CSV.`, className: "bg-green-50 text-green-800" });
+  };
+
+  // Saved Orders edit/delete handlers
+  const handleOrderEditStart = (order: Order) => {
+    setEditingOrderId(order.id);
+    setEditOrderData({ ...order });
+    setDeleteConfirmOrderId(null);
+  };
+
+  const handleOrderEditField = (field: keyof Order, value: string | number) => {
+    setEditOrderData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleOrderEditSave = () => {
+    if (editingOrderId === null) return;
+    const base = (savedOrders || []).find(o => o.id === editingOrderId) ?? ({} as Order);
+    const merged: Order = { ...base, ...editOrderData } as Order;
+    setDirtyOrderMap(prev => {
+      const next = new Map(prev);
+      next.set(editingOrderId, merged);
+      return next;
+    });
+    setEditingOrderId(null);
+    setEditOrderData({});
+  };
+
+  const handleOrderEditCancel = () => {
+    setEditingOrderId(null);
+    setEditOrderData({});
+  };
+
+  const handleOrderDeleteConfirm = (id: number) => {
+    setPendingDeleteOrderIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setDirtyOrderMap(prev => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+    setDeleteConfirmOrderId(null);
+  };
+
+  const handleUpdateOrders = async () => {
+    const modifiedRows = Array.from(dirtyOrderMap.values());
+    const deleteIds = Array.from(pendingDeleteOrderIds);
+    if (modifiedRows.length === 0 && deleteIds.length === 0) {
+      toast({ title: "Nothing to update", description: "No changes have been made.", className: "bg-yellow-50 text-yellow-800" });
+      return;
+    }
+    setIsUpdatingOrders(true);
+    try {
+      await Promise.all([
+        ...modifiedRows.map(order =>
+          apiRequest("PUT", `/api/orders/${order.id}`, order)
+        ),
+        ...deleteIds.map(id =>
+          apiRequest("DELETE", `/api/orders/${id}`)
+        ),
+      ]);
+      setDirtyOrderMap(new Map());
+      setPendingDeleteOrderIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: "Orders Updated",
+        description: `${modifiedRows.length > 0 ? `${modifiedRows.length} row(s) updated` : ""}${modifiedRows.length > 0 && deleteIds.length > 0 ? ", " : ""}${deleteIds.length > 0 ? `${deleteIds.length} row(s) deleted` : ""}.`,
+        className: "bg-green-50 text-green-800",
+      });
+    } catch (err: any) {
+      toast({ title: "Update Failed", description: err.message || "Failed to update orders.", variant: "destructive" });
+    } finally {
+      setIsUpdatingOrders(false);
+    }
   };
 
   const totalPages = Math.ceil(rows.length / pageSize);
@@ -629,6 +721,20 @@ export default function Inventory() {
                 <Button variant="outline" onClick={handleExportOrders} disabled={!savedOrders || savedOrders.length === 0} data-testid="button-export-orders">
                   <Download className="w-4 h-4 mr-2" /> Export CSV
                 </Button>
+                <Button
+                  onClick={handleUpdateOrders}
+                  disabled={isUpdatingOrders || (dirtyOrderMap.size === 0 && pendingDeleteOrderIds.size === 0)}
+                  className="relative bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  data-testid="button-update-orders"
+                >
+                  {isUpdatingOrders ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Update Order
+                  {(dirtyOrderMap.size + pendingDeleteOrderIds.size) > 0 && (
+                    <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-white text-primary rounded-full">
+                      {dirtyOrderMap.size + pendingDeleteOrderIds.size}
+                    </span>
+                  )}
+                </Button>
               </div>
               {(appliedFilters.invoiceDate || appliedFilters.icdcNumber || appliedFilters.brandNumber) && (
                 <div className="flex flex-wrap gap-2 mt-3 text-xs">
@@ -652,73 +758,190 @@ export default function Inventory() {
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
               ) : savedOrders && savedOrders.length > 0 ? (
-                <>
-                  <div className="overflow-x-auto table-typography">
-                    <table className="w-full min-w-[1400px]">
-                      <thead>
-                        <tr className="bg-muted/50 border-b border-border">
-                          <th className="table-header w-12">#</th>
-                          <th className="table-header w-28">Invoice Date</th>
-                          <th className="table-header w-48">ICDC Number</th>
-                          <th className="table-header w-24">Brand No</th>
-                          <th className="table-header w-40">Brand Name</th>
-                          <th className="table-header w-20">Type</th>
-                          <th className="table-header w-16">Pack</th>
-                          <th className="table-header w-28">Size (ml)</th>
-                          <th className="table-header w-20 text-right bg-blue-50/50">Cases</th>
-                          <th className="table-header w-20 text-right bg-blue-50/50">Bottles</th>
-                          <th className="table-header w-24 text-right">Rate/Case</th>
-                          <th className="table-header w-24 text-right">Rate/Btl</th>
-                          <th className="table-header w-28 text-right font-bold text-primary bg-primary/5">Total</th>
-                          <th className="table-header w-20 text-right">Breakage</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {savedOrders
-                          .slice((savedPage - 1) * savedPageSize, savedPage * savedPageSize)
-                          .map((order: Order, idx: number) => {
-                            const globalIdx = (savedPage - 1) * savedPageSize + idx;
-                            return (
-                              <tr key={order.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-saved-order-${globalIdx}`}>
-                                <td className="table-cell text-muted-foreground text-center">{globalIdx + 1}</td>
-                                <td className="table-cell text-sm">{order.invoiceDate || "-"}</td>
-                                <td className="table-cell text-xs font-mono">
-                                  {order.icdcNumber ? (
-                                    <button
-                                      onClick={() => handleViewShopDetail(order.icdcNumber!)}
-                                      className="text-primary underline hover:text-primary/80 cursor-pointer"
-                                      data-testid={`link-shop-detail-${globalIdx}`}
-                                    >
-                                      {order.icdcNumber}
-                                    </button>
-                                  ) : "-"}
-                                </td>
-                                <td className="table-cell font-mono text-sm">{order.brandNumber}</td>
-                                <td className="table-cell text-sm">{order.brandName}</td>
-                                <td className="table-cell text-sm">{order.productType}</td>
-                                <td className="table-cell text-sm">{order.packType}</td>
-                                <td className="table-cell text-sm">{order.packSize}</td>
-                                <td className="table-cell text-right font-mono text-sm bg-blue-50/10">{order.qtyCasesDelivered}</td>
-                                <td className="table-cell text-right font-mono text-sm bg-blue-50/10">{order.qtyBottlesDelivered}</td>
-                                <td className="table-cell text-right font-mono text-sm">{fmt2(order.ratePerCase)}</td>
-                                <td className="table-cell text-right font-mono text-sm">{fmt2(order.unitRatePerBottle)}</td>
-                                <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">{fmt2(order.totalAmount)}</td>
-                                <td className="table-cell text-right font-mono text-sm">{order.breakageBottleQty}</td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <PaginationCustom
-                    currentPage={savedPage}
-                    totalPages={Math.ceil(savedOrders.length / savedPageSize)}
-                    pageSize={savedPageSize}
-                    onPageChange={setSavedPage}
-                    onPageSizeChange={(size) => { setSavedPageSize(size); setSavedPage(1); }}
-                    totalItems={savedOrders.length}
-                  />
-                </>
+                (() => {
+                  const visibleOrders = savedOrders.filter((o: Order) => !pendingDeleteOrderIds.has(o.id));
+                  const displayOrders = visibleOrders.map((o: Order) => dirtyOrderMap.get(o.id) ?? o);
+                  return (
+                    <>
+                      <div className="overflow-x-auto table-typography">
+                        <table className="w-full min-w-[1500px]">
+                          <thead>
+                            <tr className="bg-muted/50 border-b border-border">
+                              <th className="table-header w-10">#</th>
+                              <th className="table-header w-28">Invoice Date</th>
+                              <th className="table-header w-44">ICDC Number</th>
+                              <th className="table-header w-20">Brand No</th>
+                              <th className="table-header w-36">Brand Name</th>
+                              <th className="table-header w-16">Type</th>
+                              <th className="table-header w-14">Pack</th>
+                              <th className="table-header w-28">Size (ml)</th>
+                              <th className="table-header w-16 text-right bg-blue-50/50">Cases</th>
+                              <th className="table-header w-16 text-right bg-blue-50/50">Bottles</th>
+                              <th className="table-header w-24 text-right">Rate/Case</th>
+                              <th className="table-header w-24 text-right">Rate/Btl</th>
+                              <th className="table-header w-28 text-right font-bold text-primary bg-primary/5">Total</th>
+                              <th className="table-header w-16 text-right">Breakage</th>
+                              <th className="table-header w-24 text-center">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {displayOrders
+                              .slice((savedPage - 1) * savedPageSize, savedPage * savedPageSize)
+                              .map((order: Order, idx: number) => {
+                                const globalIdx = (savedPage - 1) * savedPageSize + idx;
+                                const isEditing = editingOrderId === order.id;
+                                const isDirty = dirtyOrderMap.has(order.id);
+                                const isDeleteConfirm = deleteConfirmOrderId === order.id;
+                                return (
+                                  <tr
+                                    key={order.id}
+                                    className={`transition-colors ${isEditing ? "bg-yellow-50/60 dark:bg-yellow-900/10" : isDirty ? "bg-blue-50/40 dark:bg-blue-900/10" : "hover:bg-muted/30"}`}
+                                    data-testid={`row-saved-order-${globalIdx}`}
+                                  >
+                                    <td className="table-cell text-muted-foreground text-center text-xs">{globalIdx + 1}</td>
+
+                                    {/* Invoice Date */}
+                                    <td className="table-cell text-sm">
+                                      {isEditing ? (
+                                        <input className="input-field w-24 text-xs" value={editOrderData.invoiceDate ?? ""} onChange={e => handleOrderEditField("invoiceDate", e.target.value)} data-testid={`edit-invoice-date-${order.id}`} />
+                                      ) : order.invoiceDate || "-"}
+                                    </td>
+
+                                    {/* ICDC Number */}
+                                    <td className="table-cell text-xs font-mono">
+                                      {isEditing ? (
+                                        <input className="input-field w-36 text-xs" value={editOrderData.icdcNumber ?? ""} onChange={e => handleOrderEditField("icdcNumber", e.target.value)} data-testid={`edit-icdc-${order.id}`} />
+                                      ) : order.icdcNumber ? (
+                                        <button onClick={() => handleViewShopDetail(order.icdcNumber!)} className="text-primary underline hover:text-primary/80 cursor-pointer" data-testid={`link-shop-detail-${globalIdx}`}>{order.icdcNumber}</button>
+                                      ) : "-"}
+                                    </td>
+
+                                    {/* Brand No */}
+                                    <td className="table-cell font-mono text-sm">
+                                      {isEditing ? (
+                                        <input className="input-field w-16 text-xs" value={editOrderData.brandNumber ?? ""} onChange={e => handleOrderEditField("brandNumber", e.target.value)} data-testid={`edit-brand-number-${order.id}`} />
+                                      ) : order.brandNumber}
+                                    </td>
+
+                                    {/* Brand Name */}
+                                    <td className="table-cell text-sm">
+                                      {isEditing ? (
+                                        <input className="input-field w-32 text-xs" value={editOrderData.brandName ?? ""} onChange={e => handleOrderEditField("brandName", e.target.value)} data-testid={`edit-brand-name-${order.id}`} />
+                                      ) : order.brandName}
+                                    </td>
+
+                                    {/* Type */}
+                                    <td className="table-cell text-sm">
+                                      {isEditing ? (
+                                        <input className="input-field w-14 text-xs" value={editOrderData.productType ?? ""} onChange={e => handleOrderEditField("productType", e.target.value)} data-testid={`edit-product-type-${order.id}`} />
+                                      ) : order.productType}
+                                    </td>
+
+                                    {/* Pack */}
+                                    <td className="table-cell text-sm">
+                                      {isEditing ? (
+                                        <input className="input-field w-10 text-xs" value={editOrderData.packType ?? ""} onChange={e => handleOrderEditField("packType", e.target.value)} data-testid={`edit-pack-type-${order.id}`} />
+                                      ) : order.packType}
+                                    </td>
+
+                                    {/* Size */}
+                                    <td className="table-cell text-sm">
+                                      {isEditing ? (
+                                        <input className="input-field w-24 text-xs" value={editOrderData.packSize ?? ""} onChange={e => handleOrderEditField("packSize", e.target.value)} data-testid={`edit-pack-size-${order.id}`} />
+                                      ) : order.packSize}
+                                    </td>
+
+                                    {/* Cases */}
+                                    <td className="table-cell text-right font-mono text-sm bg-blue-50/10">
+                                      {isEditing ? (
+                                        <input type="number" className="input-field w-14 text-xs text-right" value={editOrderData.qtyCasesDelivered ?? 0} onChange={e => handleOrderEditField("qtyCasesDelivered", parseInt(e.target.value) || 0)} data-testid={`edit-cases-${order.id}`} />
+                                      ) : order.qtyCasesDelivered}
+                                    </td>
+
+                                    {/* Bottles */}
+                                    <td className="table-cell text-right font-mono text-sm bg-blue-50/10">
+                                      {isEditing ? (
+                                        <input type="number" className="input-field w-14 text-xs text-right" value={editOrderData.qtyBottlesDelivered ?? 0} onChange={e => handleOrderEditField("qtyBottlesDelivered", parseInt(e.target.value) || 0)} data-testid={`edit-bottles-${order.id}`} />
+                                      ) : order.qtyBottlesDelivered}
+                                    </td>
+
+                                    {/* Rate/Case */}
+                                    <td className="table-cell text-right font-mono text-sm">
+                                      {isEditing ? (
+                                        <input className="input-field w-20 text-xs text-right" value={editOrderData.ratePerCase ?? ""} onChange={e => handleOrderEditField("ratePerCase", e.target.value)} data-testid={`edit-rate-case-${order.id}`} />
+                                      ) : fmt2(order.ratePerCase)}
+                                    </td>
+
+                                    {/* Rate/Btl */}
+                                    <td className="table-cell text-right font-mono text-sm">
+                                      {isEditing ? (
+                                        <input className="input-field w-20 text-xs text-right" value={editOrderData.unitRatePerBottle ?? ""} onChange={e => handleOrderEditField("unitRatePerBottle", e.target.value)} data-testid={`edit-rate-btl-${order.id}`} />
+                                      ) : fmt2(order.unitRatePerBottle)}
+                                    </td>
+
+                                    {/* Total */}
+                                    <td className="table-cell text-right font-bold text-primary font-mono bg-primary/5">
+                                      {isEditing ? (
+                                        <input className="input-field w-24 text-xs text-right" value={editOrderData.totalAmount ?? ""} onChange={e => handleOrderEditField("totalAmount", e.target.value)} data-testid={`edit-total-${order.id}`} />
+                                      ) : fmt2(order.totalAmount)}
+                                    </td>
+
+                                    {/* Breakage */}
+                                    <td className="table-cell text-right font-mono text-sm">
+                                      {isEditing ? (
+                                        <input type="number" className="input-field w-14 text-xs text-right" value={editOrderData.breakageBottleQty ?? 0} onChange={e => handleOrderEditField("breakageBottleQty", parseInt(e.target.value) || 0)} data-testid={`edit-breakage-${order.id}`} />
+                                      ) : order.breakageBottleQty}
+                                    </td>
+
+                                    {/* Actions */}
+                                    <td className="table-cell text-center">
+                                      {isEditing ? (
+                                        <div className="flex items-center justify-center gap-1">
+                                          <button onClick={handleOrderEditSave} className="p-1 rounded text-green-600 hover:bg-green-100 transition-colors" title="Save changes" data-testid={`btn-save-order-edit-${order.id}`}>
+                                            <Check className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={handleOrderEditCancel} className="p-1 rounded text-muted-foreground hover:bg-muted transition-colors" title="Cancel" data-testid={`btn-cancel-order-edit-${order.id}`}>
+                                            <X className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      ) : isDeleteConfirm ? (
+                                        <div className="flex items-center justify-center gap-1">
+                                          <span className="text-xs text-red-600 font-medium mr-1">Sure?</span>
+                                          <button onClick={() => handleOrderDeleteConfirm(order.id)} className="p-1 rounded text-red-600 hover:bg-red-100 transition-colors" title="Confirm delete" data-testid={`btn-confirm-delete-order-${order.id}`}>
+                                            <Check className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={() => setDeleteConfirmOrderId(null)} className="p-1 rounded text-muted-foreground hover:bg-muted transition-colors" title="Cancel" data-testid={`btn-cancel-delete-order-${order.id}`}>
+                                            <X className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-center gap-1">
+                                          <button onClick={() => handleOrderEditStart(order)} className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors" title="Edit row" data-testid={`btn-edit-order-${order.id}`}>
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button onClick={() => setDeleteConfirmOrderId(order.id)} className="p-1 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete row" data-testid={`btn-delete-order-${order.id}`}>
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <PaginationCustom
+                        currentPage={savedPage}
+                        totalPages={Math.ceil(displayOrders.length / savedPageSize)}
+                        pageSize={savedPageSize}
+                        onPageChange={setSavedPage}
+                        onPageSizeChange={(size) => { setSavedPageSize(size); setSavedPage(1); }}
+                        totalItems={displayOrders.length}
+                      />
+                    </>
+                  );
+                })()
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <Filter className="w-8 h-8 mb-2 opacity-40" />
