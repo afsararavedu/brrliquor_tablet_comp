@@ -274,57 +274,47 @@ export default function Expenses() {
       </div>
 
       <Tabs defaultValue="entries">
-        {/* Tab bar row: tabs on the left, type-toggle buttons on the right */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <TabsList>
-            <TabsTrigger value="entries" data-testid="tab-entries">Entries</TabsTrigger>
-            {isAdmin && <TabsTrigger value="categories" data-testid="tab-categories"><Settings2 className="w-3.5 h-3.5 mr-1" />Manage Categories</TabsTrigger>}
-          </TabsList>
-
-          {/* Expense / Income toggle — drives the form category dropdown */}
-          <div className="flex items-center gap-1.5" data-testid="type-toggle-group">
-            <button
-              type="button"
-              onClick={() => { setFormType("expense"); setFormCategory(""); }}
-              data-testid="button-type-expense"
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
-                formType === "expense"
-                  ? "bg-red-500 border-red-500 text-white shadow-sm"
-                  : "bg-card border-border text-muted-foreground hover:border-red-300 hover:text-red-600"
-              }`}
-            >
-              <TrendingDown className="w-3.5 h-3.5" />
-              Expense
-            </button>
-            <button
-              type="button"
-              onClick={() => { setFormType("income"); setFormCategory(""); }}
-              data-testid="button-type-income"
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
-                formType === "income"
-                  ? "bg-green-500 border-green-500 text-white shadow-sm"
-                  : "bg-card border-border text-muted-foreground hover:border-green-300 hover:text-green-600"
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5" />
-              Income
-            </button>
-          </div>
-        </div>
+        <TabsList>
+          <TabsTrigger value="entries" data-testid="tab-entries">Entries</TabsTrigger>
+          {isAdmin && <TabsTrigger value="categories" data-testid="tab-categories"><Settings2 className="w-3.5 h-3.5 mr-1" />Manage Categories</TabsTrigger>}
+        </TabsList>
 
         {/* ── Entries Tab ── */}
         <TabsContent value="entries" className="space-y-5 mt-4">
 
           {/* Add Entry Form */}
           <div className="border rounded-xl p-5 bg-card space-y-4">
-            <div className="flex items-center gap-2">
+            {/* Form header: title on the left, Expense/Income toggle on the right */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Add New Entry</h2>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                formType === "expense" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
-              }`}>
-                {formType === "expense" ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
-                {formType === "expense" ? "Additional Expense" : "Additional Income"}
-              </span>
+              <div className="flex items-center gap-1.5" data-testid="type-toggle-group">
+                <button
+                  type="button"
+                  onClick={() => { setFormType("expense"); setFormCategory(""); }}
+                  data-testid="button-type-expense"
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
+                    formType === "expense"
+                      ? "bg-red-500 border-red-500 text-white shadow-sm"
+                      : "bg-card border-border text-muted-foreground hover:border-red-300 hover:text-red-600"
+                  }`}
+                >
+                  <TrendingDown className="w-3.5 h-3.5" />
+                  Expense
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setFormType("income"); setFormCategory(""); }}
+                  data-testid="button-type-income"
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
+                    formType === "income"
+                      ? "bg-green-500 border-green-500 text-white shadow-sm"
+                      : "bg-card border-border text-muted-foreground hover:border-green-300 hover:text-green-600"
+                  }`}
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  Income
+                </button>
+              </div>
             </div>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 items-end">
 
