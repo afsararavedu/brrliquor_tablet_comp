@@ -1,3 +1,4 @@
+import brrLogo from "@assets/brr_solution_logo_1776622112650.jpeg";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -69,9 +70,11 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md shadow-xl border-border/40">
         <CardHeader className="space-y-1 text-center">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-primary/20 mx-auto mb-4">
-            B
-          </div>
+          <img
+            src={brrLogo}
+            alt="BRR IT Solutions"
+            className="w-24 h-24 object-contain mx-auto mb-2"
+          />
           <CardTitle className="text-2xl font-bold">BRR Liquor Soft Login</CardTitle>
           <CardDescription>Enter your credentials to access your dashboard</CardDescription>
         </CardHeader>
