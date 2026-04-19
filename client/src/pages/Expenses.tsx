@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { format, parse, subDays } from "date-fns";
+import { format, parse } from "date-fns";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -274,32 +274,59 @@ export default function Expenses() {
       </div>
 
       <Tabs defaultValue="entries">
-        <TabsList>
-          <TabsTrigger value="entries" data-testid="tab-entries">Entries</TabsTrigger>
-          {isAdmin && <TabsTrigger value="categories" data-testid="tab-categories"><Settings2 className="w-3.5 h-3.5 mr-1" />Manage Categories</TabsTrigger>}
-        </TabsList>
+        {/* Tab bar row: tabs on the left, type-toggle buttons on the right */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="entries" data-testid="tab-entries">Entries</TabsTrigger>
+            {isAdmin && <TabsTrigger value="categories" data-testid="tab-categories"><Settings2 className="w-3.5 h-3.5 mr-1" />Manage Categories</TabsTrigger>}
+          </TabsList>
+
+          {/* Expense / Income toggle — drives the form category dropdown */}
+          <div className="flex items-center gap-1.5" data-testid="type-toggle-group">
+            <button
+              type="button"
+              onClick={() => { setFormType("expense"); setFormCategory(""); }}
+              data-testid="button-type-expense"
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
+                formType === "expense"
+                  ? "bg-red-500 border-red-500 text-white shadow-sm"
+                  : "bg-card border-border text-muted-foreground hover:border-red-300 hover:text-red-600"
+              }`}
+            >
+              <TrendingDown className="w-3.5 h-3.5" />
+              Expense
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFormType("income"); setFormCategory(""); }}
+              data-testid="button-type-income"
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
+                formType === "income"
+                  ? "bg-green-500 border-green-500 text-white shadow-sm"
+                  : "bg-card border-border text-muted-foreground hover:border-green-300 hover:text-green-600"
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              Income
+            </button>
+          </div>
+        </div>
 
         {/* ── Entries Tab ── */}
         <TabsContent value="entries" className="space-y-5 mt-4">
 
           {/* Add Entry Form */}
           <div className="border rounded-xl p-5 bg-card space-y-4">
-            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Add New Entry</h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 items-end">
-
-              {/* Type */}
-              <div className="space-y-1">
-                <Label className="text-xs">Type</Label>
-                <Select value={formType} onValueChange={v => setFormType(v as "expense" | "income")} data-testid="select-entry-type">
-                  <SelectTrigger className="h-9" data-testid="select-entry-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="expense">Additional Expense</SelectItem>
-                    <SelectItem value="income">Additional Income</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Add New Entry</h2>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                formType === "expense" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+              }`}>
+                {formType === "expense" ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
+                {formType === "expense" ? "Additional Expense" : "Additional Income"}
+              </span>
+            </div>
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 items-end">
 
               {/* Category */}
               <div className="space-y-1">
