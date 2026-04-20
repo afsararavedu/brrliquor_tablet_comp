@@ -335,9 +335,9 @@ export default function Sales() {
           newCs,
           newBtls,
           totalStock,
-          "",
-          "",
-          "",
+          s.closingBalanceCases ?? 0,
+          s.closingBalanceBottles ?? 0,
+          s.breakageBottles ?? "",
         ];
       }),
     ];
