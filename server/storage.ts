@@ -61,6 +61,9 @@ export interface IStorage {
   upsertDailyStockSnapshot(date: string): Promise<void>;
   replaceFullDailyStockSnapshot(date: string): Promise<void>;
 
+  // Archive / bulk import of historical daily sales (multi-date)
+  bulkImportDailySales(rows: InsertDailySale[]): Promise<number>;
+
   // Sales MRP Overrides
   getSalesMrpDetails(): Promise<SalesMrpDetail[]>;
   upsertSalesMrpDetail(data: InsertSalesMrpDetail): Promise<SalesMrpDetail>;
@@ -201,6 +204,42 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .returning();
+  }
+
+  async bulkImportDailySales(rows: InsertDailySale[]): Promise<number> {
+    if (rows.length === 0) return 0;
+    // Deduplicate: keep last occurrence per (brandNumber, size, saleDate)
+    const deduped = Array.from(
+      rows.reduce((map, row) => {
+        const key = `${row.brandNumber}|${row.size}|${row.saleDate}`;
+        map.set(key, row);
+        return map;
+      }, new Map<string, InsertDailySale>()).values()
+    );
+    const result = await db.insert(dailySales)
+      .values(deduped)
+      .onConflictDoUpdate({
+        target: [dailySales.brandNumber, dailySales.size, dailySales.saleDate],
+        set: {
+          brandName: sql`excluded.brand_name`,
+          quantityPerCase: sql`excluded.quantity_per_case`,
+          openingBalanceBottles: sql`excluded.opening_balance_bottles`,
+          newStockCases: sql`excluded.new_stock_cases`,
+          newStockBottles: sql`excluded.new_stock_bottles`,
+          closingBalanceCases: sql`excluded.closing_balance_cases`,
+          closingBalanceBottles: sql`excluded.closing_balance_bottles`,
+          soldBottles: sql`excluded.sold_bottles`,
+          saleValue: sql`excluded.sale_value`,
+          totalSaleValue: sql`excluded.total_sale_value`,
+          breakageBottles: sql`excluded.breakage_bottles`,
+          totalClosingStock: sql`excluded.total_closing_stock`,
+          finalClosingBalance: sql`excluded.final_closing_balance`,
+          mrp: sql`excluded.mrp`,
+          invoiceDate: sql`excluded.invoice_date`,
+        }
+      })
+      .returning();
+    return result.length;
   }
 
   async deleteDailySale(id: number): Promise<void> {

@@ -47,6 +47,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { api } from "@shared/routes";
+import { ImportSalesDataTab } from "@/components/ImportSalesDataTab";
 
 // Dropdown Options
 const PRODUCT_TYPES = ["Beer", "IML", "Wine"];
@@ -593,6 +594,12 @@ export default function Inventory() {
             <Tag className="w-4 h-4 mr-2" />
             Update Sales MRP
           </TabsTrigger>
+          {user?.role === "admin" && (
+            <TabsTrigger value="import-sales" data-testid="tab-import-sales" className="rounded-lg px-5 py-2 font-medium">
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Import Sales Data
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ==================== TAB 1: IMPORT INVOICE ==================== */}
@@ -1386,6 +1393,13 @@ export default function Inventory() {
             </div>
           </section>
         </TabsContent>
+
+        {/* ==================== TAB 3: IMPORT SALES DATA ==================== */}
+        {user?.role === "admin" && (
+          <TabsContent value="import-sales" className="space-y-6">
+            <ImportSalesDataTab />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* ==================== DIALOGS ==================== */}

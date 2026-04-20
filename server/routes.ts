@@ -1023,6 +1023,141 @@ export async function registerRoutes(
     }
   });
 
+  // Import archive / historical daily sales from Excel
+  app.post("/api/sales/import-archive", upload.single("file"), async (req, res) => {
+    try {
+      const isAdmin = (req.user as any)?.role === "admin";
+      if (!isAdmin) return res.status(403).json({ message: "Admin only" });
+      if (!req.file) return res.status(400).json({ message: "No file uploaded." });
+      const ext = req.file.originalname.toLowerCase().split(".").pop() || "";
+      if (!["xls", "xlsx"].includes(ext)) {
+        return res.status(400).json({ message: "Please upload an .xls or .xlsx file." });
+      }
+
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: false });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      if (jsonRows.length === 0) return res.status(400).json({ message: "File is empty or has no data rows." });
+
+      // Build MRP lookup from stock_details (fallback) and sales_mrp_details (override)
+      const allStock = await storage.getStockDetails();
+      const allMrp   = await storage.getSalesMrpDetails();
+      const mrpMap = new Map<string, string>();
+      for (const s of allStock)  mrpMap.set(`${s.brandNumber}|${s.size}`, String(s.mrp ?? "0"));
+      for (const m of allMrp)    mrpMap.set(`${m.brandNumber}|${m.size}`,  String(m.salesMrp ?? "0"));
+
+      // Excel date serial → YYYY-MM-DD
+      const toDateStr = (raw: any): string | null => {
+        if (!raw && raw !== 0) return null;
+        if (typeof raw === "number") {
+          const d = XLSX.SSF.parse_date_code(raw);
+          if (!d) return null;
+          const mm = String(d.m).padStart(2, "0");
+          const dd = String(d.d).padStart(2, "0");
+          return `${d.y}-${mm}-${dd}`;
+        }
+        const s = String(raw).trim();
+        // Try DD/MM/YYYY or YYYY-MM-DD
+        const ddmm = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (ddmm) return `${ddmm[3]}-${ddmm[2].padStart(2,"0")}-${ddmm[1].padStart(2,"0")}`;
+        const iso = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+        if (iso) return `${iso[1]}-${iso[2].padStart(2,"0")}-${iso[3].padStart(2,"0")}`;
+        return null;
+      };
+
+      const norm = (s: string) => String(s).toLowerCase().replace(/[\s_\-:.()]/g, "");
+      const COL: Record<string, string> = {
+        saledate: "saleDate", date: "saleDate",
+        brandno: "brandNumber", brandnumber: "brandNumber",
+        brandname: "brandName",
+        size: "size",
+        qtycase: "qtyPerCase", qtypecase: "qtyPerCase", qtypercase: "qtyPerCase",
+        openingbalbtls: "openingBal", openingbalancebtls: "openingBal", openingbaltbtls: "openingBal",
+        opbalbtls: "openingBal",
+        newstockcs: "newStockCs", newstockcases: "newStockCs",
+        newstockbtls: "newStockBtls", newstockbottles: "newStockBtls",
+        totalstock: "totalStock",
+        clsbalcs: "clsCs", clsbalancecs: "clsCs", closingbalcs: "clsCs",
+        clsbalbtls: "clsBtls", clsbalancebtls: "clsBtls", closingbalbtls: "clsBtls",
+        breakage: "breakage", breakagebottles: "breakage",
+        invoicedate: "invoiceDate",
+      };
+
+      const rows: any[] = [];
+      const skipped: number[] = [];
+
+      for (let i = 0; i < jsonRows.length; i++) {
+        const raw = jsonRows[i];
+        const m: Record<string, any> = {};
+        for (const [col, val] of Object.entries(raw)) {
+          const key = COL[norm(col)];
+          if (key) m[key] = val;
+        }
+
+        const saleDate = toDateStr(m.saleDate);
+        const brandNumber = String(m.brandNumber ?? "").trim();
+        const brandName   = String(m.brandName   ?? "").trim();
+        const size        = String(m.size         ?? "").trim();
+        const qtyPerCase  = parseInt(m.qtyPerCase ?? 0, 10) || 0;
+
+        if (!saleDate || !brandNumber || !brandName || !size || !qtyPerCase) {
+          skipped.push(i + 2);
+          continue;
+        }
+
+        const opBal    = parseInt(m.openingBal   ?? 0, 10) || 0;
+        const newCs    = parseInt(m.newStockCs   ?? 0, 10) || 0;
+        const newBtls  = parseInt(m.newStockBtls ?? 0, 10) || 0;
+        const clsCs    = parseInt(m.clsCs        ?? 0, 10) || 0;
+        const clsBtls  = parseInt(m.clsBtls      ?? 0, 10) || 0;
+        const breakage = parseInt(m.breakage      ?? 0, 10) || 0;
+        const invDate  = toDateStr(m.invoiceDate);
+
+        const paddedBrand = brandNumber.padStart(4, "0");
+        const totalStock   = opBal + (qtyPerCase * newCs) + newBtls;
+        const closingTotal = (clsCs * qtyPerCase) + clsBtls;
+        const soldBottles  = totalStock - closingTotal;
+        const mrp          = parseFloat(mrpMap.get(`${paddedBrand}|${size}`) ?? mrpMap.get(`${brandNumber}|${size}`) ?? "0") || 0;
+        const saleValue    = soldBottles > 0 ? (soldBottles * mrp) : 0;
+
+        rows.push({
+          brandNumber: paddedBrand,
+          brandName,
+          size,
+          quantityPerCase: qtyPerCase,
+          openingBalanceBottles: opBal,
+          newStockCases: newCs,
+          newStockBottles: newBtls,
+          closingBalanceCases: clsCs,
+          closingBalanceBottles: clsBtls,
+          breakageBottles: breakage,
+          soldBottles: Math.max(0, soldBottles),
+          saleValue: saleValue.toFixed(2),
+          totalSaleValue: saleValue.toFixed(2),
+          totalClosingStock: closingTotal,
+          finalClosingBalance: Math.max(0, closingTotal - breakage),
+          mrp: mrp.toFixed(2),
+          saleDate,
+          invoiceDate: invDate ?? null,
+          isSubmitted: false,
+        });
+      }
+
+      if (rows.length === 0) {
+        return res.status(400).json({ message: `No valid rows found. Skipped: ${skipped.length}. Ensure required columns are present.` });
+      }
+
+      const saved = await storage.bulkImportDailySales(rows);
+      res.json({
+        message: `${saved} row(s) imported successfully.${skipped.length > 0 ? ` Skipped ${skipped.length} row(s) with missing required fields.` : ""}`,
+        saved,
+        skipped: skipped.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: "Import failed: " + err.message });
+    }
+  });
+
   app.get(api.sales.isSubmitted.path, async (req, res) => {
     const date = req.query.date as string | undefined;
     if (!date) {
