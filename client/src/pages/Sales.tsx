@@ -335,8 +335,8 @@ export default function Sales() {
           newCs,
           newBtls,
           totalStock,
-          touchedClosingIds.has(s.id) ? (s.closingBalanceCases ?? 0) : "",
-          touchedClosingIds.has(s.id) ? (s.closingBalanceBottles ?? 0) : "",
+          s.closingBalanceCases ?? 0,
+          s.closingBalanceBottles ?? 0,
           s.breakageBottles ?? "",
         ];
       }),
@@ -350,7 +350,7 @@ export default function Sales() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sales Template");
     XLSX.writeFile(wb, `sales_template_${selectedDate}.xlsx`);
-  }, [localSales, selectedDate, toast, touchedClosingIds]);
+  }, [localSales, selectedDate, toast]);
 
   // Upload Excel and apply values into localSales (same calculation as handleInputChange)
   const handleUploadExcel = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -445,7 +445,11 @@ export default function Sales() {
               totalClosingStock: closingTotal,
               finalClosingBalance: Math.round(closingTotal - breakage),
             };
-            uploadedTouchedIds.push(item.id);
+            // Only mark as touched when actual sales or breakage occurred;
+            // rows where closing equals total stock (no change) stay untouched so DB stays clean
+            if (soldBottles !== 0 || breakage > 0) {
+              uploadedTouchedIds.push(item.id);
+            }
             updated++;
           }
           setUploadResult({ updated, skipped, notFound });
