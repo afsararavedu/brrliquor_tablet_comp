@@ -216,30 +216,38 @@ export class DatabaseStorage implements IStorage {
         return map;
       }, new Map<string, InsertDailySale>()).values()
     );
-    const result = await db.insert(dailySales)
-      .values(deduped)
-      .onConflictDoUpdate({
-        target: [dailySales.brandNumber, dailySales.size, dailySales.saleDate],
-        set: {
-          brandName: sql`excluded.brand_name`,
-          quantityPerCase: sql`excluded.quantity_per_case`,
-          openingBalanceBottles: sql`excluded.opening_balance_bottles`,
-          newStockCases: sql`excluded.new_stock_cases`,
-          newStockBottles: sql`excluded.new_stock_bottles`,
-          closingBalanceCases: sql`excluded.closing_balance_cases`,
-          closingBalanceBottles: sql`excluded.closing_balance_bottles`,
-          soldBottles: sql`excluded.sold_bottles`,
-          saleValue: sql`excluded.sale_value`,
-          totalSaleValue: sql`excluded.total_sale_value`,
-          breakageBottles: sql`excluded.breakage_bottles`,
-          totalClosingStock: sql`excluded.total_closing_stock`,
-          finalClosingBalance: sql`excluded.final_closing_balance`,
-          mrp: sql`excluded.mrp`,
-          invoiceDate: sql`excluded.invoice_date`,
-        }
-      })
-      .returning();
-    return result.length;
+
+    // Process in batches of 100 to avoid call stack overflow on large files
+    const BATCH_SIZE = 100;
+    let totalSaved = 0;
+    for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
+      const batch = deduped.slice(i, i + BATCH_SIZE);
+      const result = await db.insert(dailySales)
+        .values(batch)
+        .onConflictDoUpdate({
+          target: [dailySales.brandNumber, dailySales.size, dailySales.saleDate],
+          set: {
+            brandName: sql`excluded.brand_name`,
+            quantityPerCase: sql`excluded.quantity_per_case`,
+            openingBalanceBottles: sql`excluded.opening_balance_bottles`,
+            newStockCases: sql`excluded.new_stock_cases`,
+            newStockBottles: sql`excluded.new_stock_bottles`,
+            closingBalanceCases: sql`excluded.closing_balance_cases`,
+            closingBalanceBottles: sql`excluded.closing_balance_bottles`,
+            soldBottles: sql`excluded.sold_bottles`,
+            saleValue: sql`excluded.sale_value`,
+            totalSaleValue: sql`excluded.total_sale_value`,
+            breakageBottles: sql`excluded.breakage_bottles`,
+            totalClosingStock: sql`excluded.total_closing_stock`,
+            finalClosingBalance: sql`excluded.final_closing_balance`,
+            mrp: sql`excluded.mrp`,
+            invoiceDate: sql`excluded.invoice_date`,
+          }
+        })
+        .returning();
+      totalSaved += result.length;
+    }
+    return totalSaved;
   }
 
   async deleteDailySale(id: number): Promise<void> {
