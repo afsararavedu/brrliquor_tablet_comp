@@ -1,5 +1,5 @@
 import brrLogo from "@assets/brr_solution_logo_1776622112650.jpeg";
-import bgImage from "@assets/Liquor-store-inventory-homepage_1776678987599.png";
+const bgImage = "/wine-bg.avif";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -62,12 +62,13 @@ export default function AuthPage() {
 
   return (
     <div
-      className="min-h-screen flex items-end justify-center pb-10 p-4"
+      className="min-h-screen flex items-center justify-center p-4"
       style={{
         backgroundImage: `url(${bgImage})`,
         backgroundSize: "cover",
-        backgroundPosition: "center top",
+        backgroundPosition: "center center",
         backgroundRepeat: "no-repeat",
+        backgroundAttachment: "fixed",
       }}
     >
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
