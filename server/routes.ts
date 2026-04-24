@@ -1368,6 +1368,15 @@ export async function registerRoutes(
   });
 
 
+  app.get("/api/sales/all", async (_req, res) => {
+    try {
+      const sales = await storage.getDailySales();
+      res.json(sales);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sales records" });
+    }
+  });
+
   app.get("/api/sales/earliest-invoice-date", async (_req, res) => {
     try {
       const date = await storage.getEarliestInvoiceDate();

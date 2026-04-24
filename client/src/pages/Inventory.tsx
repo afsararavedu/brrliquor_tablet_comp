@@ -35,6 +35,10 @@ import {
   Package,
   ReceiptText,
   LayoutGrid,
+  BarChart2,
+  Trophy,
+  TrendingUp,
+  Upload,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -53,7 +57,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
-import { type InsertOrder, type Order, type ShopDetail, type SalesMrpDetail } from "@shared/schema";
+import { type InsertOrder, type Order, type ShopDetail, type SalesMrpDetail, type DailySale } from "@shared/schema";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
@@ -204,6 +208,16 @@ export default function Inventory() {
   const [isMrpUploading, setIsMrpUploading] = useState(false);
   const [mrpSearch, setMrpSearch] = useState("");
 
+  // ---- Sales Records Tab State ----
+  const srFileInputRef = useRef<HTMLInputElement>(null);
+  const [srSearchQuery, setSrSearchQuery] = useState("");
+  const [srSortField, setSrSortField] = useState<'saleDate' | 'brandNumber' | 'brandName' | 'soldBottles' | 'saleValue'>('saleDate');
+  const [srSortDir, setSrSortDir] = useState<'asc' | 'desc'>('desc');
+  const [srSortOpen, setSrSortOpen] = useState(false);
+  const [srPage, setSrPage] = useState(1);
+  const srPageSize = 25;
+  const [isSrImporting, setIsSrImporting] = useState(false);
+
   // ---- Fetch All Orders ----
   const {
     data: allOrders,
@@ -251,6 +265,11 @@ export default function Inventory() {
       return res.json();
     },
   });
+  // ---- Sales Records Data ----
+  const { data: allSalesData, isLoading: isLoadingSales, refetch: refetchSales } = useQuery<DailySale[]>({
+    queryKey: ["/api/sales/all"],
+  });
+
   const { mutate: saveSalesMrp, isPending: isSavingMrp } = useMutation({
     mutationFn: async (data: any) => {
       const res = await fetch("/api/sales-mrp", {
@@ -358,6 +377,56 @@ export default function Inventory() {
   }, [allOrders]);
 
   const hasActiveFilters = !!(filterFromDate || filterToDate || filterIcdcNumber || filterBrandNumber);
+
+  // ---- Sales Records computed ----
+  const salesStats = useMemo(() => {
+    const rows = allSalesData ?? [];
+    const totalRevenue = rows.reduce((s, r) => s + parseFloat((r.totalSaleValue ?? r.saleValue ?? '0') as string), 0);
+    const bottlesSold = rows.reduce((s, r) => s + (r.soldBottles ?? 0), 0);
+    const uniqueDates = new Set(rows.map(r => r.saleDate)).size;
+    const brandBottles: Record<string, number> = {};
+    rows.forEach(r => { if (r.brandName) brandBottles[r.brandName] = (brandBottles[r.brandName] ?? 0) + (r.soldBottles ?? 0); });
+    const topBrand = Object.entries(brandBottles).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+    return { totalRevenue, bottlesSold, topBrand, daysTracked: uniqueDates, totalLines: rows.length };
+  }, [allSalesData]);
+
+  const displaySales = useMemo(() => {
+    let rows = allSalesData ?? [];
+    if (srSearchQuery) {
+      const q = srSearchQuery.toLowerCase();
+      rows = rows.filter(r => (r.saleDate ?? '').includes(q) || r.brandNumber.toLowerCase().includes(q) || r.brandName.toLowerCase().includes(q));
+    }
+    return [...rows].sort((a, b) => {
+      let cmp = 0;
+      if (srSortField === 'saleDate') cmp = (a.saleDate ?? '').localeCompare(b.saleDate ?? '');
+      else if (srSortField === 'brandNumber') cmp = a.brandNumber.localeCompare(b.brandNumber);
+      else if (srSortField === 'brandName') cmp = a.brandName.localeCompare(b.brandName);
+      else if (srSortField === 'soldBottles') cmp = (a.soldBottles ?? 0) - (b.soldBottles ?? 0);
+      else if (srSortField === 'saleValue') cmp = parseFloat((a.totalSaleValue ?? '0') as string) - parseFloat((b.totalSaleValue ?? '0') as string);
+      return srSortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [allSalesData, srSearchQuery, srSortField, srSortDir]);
+
+  const handleSrImport = async (file: File) => {
+    setIsSrImporting(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch('/api/sales/import-archive', { method: 'POST', body: fd, credentials: 'include' });
+      const data = await res.json();
+      if (res.ok) {
+        toast({ title: 'Import successful', description: data.message });
+        refetchSales();
+      } else {
+        toast({ title: 'Import failed', description: data.message, variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Import error', description: String(e?.message), variant: 'destructive' });
+    } finally {
+      setIsSrImporting(false);
+      if (srFileInputRef.current) srFileInputRef.current.value = '';
+    }
+  };
 
   // ---- Pending applied filter state for filter popover ----
   const [pendingFromDate, setPendingFromDate] = useState<Date | null>(null);
@@ -648,51 +717,82 @@ export default function Inventory() {
             <Tag className="w-3.5 h-3.5" />
             Sales MRP
           </button>
-          {user?.role === 'admin' && (
-            <button
-              onClick={() => setActiveView('import-sales')}
-              data-testid="tab-import-sales-data"
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${activeView === 'import-sales' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'}`}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              Import Sales Data
-            </button>
-          )}
+          <button
+            onClick={() => setActiveView('import-sales')}
+            data-testid="tab-sales-records"
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${activeView === 'import-sales' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'}`}
+          >
+            <BarChart2 className="w-3.5 h-3.5" />
+            Sales Records
+          </button>
         </div>
       </div>
 
       {/* ===================== STATS CARDS ===================== */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">ICDC Invoices</p>
-            <p className="text-2xl font-bold text-foreground">{stats.uniqueIcdc}</p>
+      {activeView !== 'import-sales' ? (
+        <div className="grid grid-cols-4 gap-3">
+          <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">ICDC Invoices</p>
+              <p className="text-2xl font-bold text-foreground">{stats.uniqueIcdc}</p>
+            </div>
+            <div className="p-2 bg-primary/5 rounded-lg"><ReceiptText className="w-5 h-5 text-primary" /></div>
           </div>
-          <div className="p-2 bg-primary/5 rounded-lg"><ReceiptText className="w-5 h-5 text-primary" /></div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Total Cases</p>
-            <p className="text-2xl font-bold text-foreground">{stats.totalCases.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{stats.totalBottles.toLocaleString()} bottles</p>
+          <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Total Cases</p>
+              <p className="text-2xl font-bold text-foreground">{stats.totalCases.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{stats.totalBottles.toLocaleString()} bottles</p>
+            </div>
+            <div className="p-2 bg-blue-50 rounded-lg"><Package className="w-5 h-5 text-blue-600" /></div>
           </div>
-          <div className="p-2 bg-blue-50 rounded-lg"><Package className="w-5 h-5 text-blue-600" /></div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Stock Value</p>
-            <p className="text-2xl font-bold text-foreground">₹{stats.totalValue >= 1000 ? `${(stats.totalValue / 1000).toFixed(1)}K` : stats.totalValue.toFixed(0)}</p>
+          <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Stock Value</p>
+              <p className="text-2xl font-bold text-foreground">₹{stats.totalValue >= 1000 ? `${(stats.totalValue / 1000).toFixed(1)}K` : stats.totalValue.toFixed(0)}</p>
+            </div>
+            <div className="p-2 bg-green-50 rounded-lg"><LayoutGrid className="w-5 h-5 text-green-600" /></div>
           </div>
-          <div className="p-2 bg-green-50 rounded-lg"><LayoutGrid className="w-5 h-5 text-green-600" /></div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">This Month</p>
-            <p className="text-2xl font-bold text-foreground">{stats.thisMonthLines} <span className="text-base font-normal text-muted-foreground">lines</span></p>
+          <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">This Month</p>
+              <p className="text-2xl font-bold text-foreground">{stats.thisMonthLines} <span className="text-base font-normal text-muted-foreground">lines</span></p>
+            </div>
+            <div className="p-2 bg-orange-50 rounded-lg"><CalendarIcon className="w-5 h-5 text-orange-500" /></div>
           </div>
-          <div className="p-2 bg-orange-50 rounded-lg"><CalendarIcon className="w-5 h-5 text-orange-500" /></div>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-4 gap-3">
+          <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Total Revenue</p>
+              <p className="text-2xl font-bold text-foreground">₹{salesStats.totalRevenue >= 100000 ? `${(salesStats.totalRevenue / 100000).toFixed(1)}L` : salesStats.totalRevenue >= 1000 ? `${(salesStats.totalRevenue / 1000).toFixed(1)}K` : salesStats.totalRevenue.toFixed(0)}</p>
+            </div>
+            <div className="p-2 bg-primary/5 rounded-lg"><TrendingUp className="w-5 h-5 text-primary" /></div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Bottles Sold</p>
+              <p className="text-2xl font-bold text-foreground">{salesStats.bottlesSold.toLocaleString()}</p>
+            </div>
+            <div className="p-2 bg-blue-50 rounded-lg"><Package className="w-5 h-5 text-blue-600" /></div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Top Brand</p>
+              <p className="text-xl font-bold text-foreground truncate max-w-[150px]" title={salesStats.topBrand}>{salesStats.topBrand}</p>
+            </div>
+            <div className="p-2 bg-yellow-50 rounded-lg"><Trophy className="w-5 h-5 text-yellow-600" /></div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Days Tracked</p>
+              <p className="text-2xl font-bold text-foreground">{salesStats.daysTracked} <span className="text-base font-normal text-muted-foreground">days</span></p>
+            </div>
+            <div className="p-2 bg-green-50 rounded-lg"><CalendarIcon className="w-5 h-5 text-green-600" /></div>
+          </div>
+        </div>
+      )}
 
       {/* ===================== MAIN PANEL ===================== */}
       <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
@@ -1215,10 +1315,234 @@ export default function Inventory() {
           </div>
         )}
 
-        {/* ======= IMPORT SALES DATA TAB CONTENT ======= */}
-        {activeView === 'import-sales' && user?.role === 'admin' && (
-          <div className="p-4">
-            <ImportSalesDataTab />
+        {/* ======= SALES RECORDS TAB CONTENT ======= */}
+        {activeView === 'import-sales' && (
+          <div>
+            {/* Sales Records Toolbar */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-wrap">
+              <span className="text-sm font-medium text-foreground">
+                Sales Records <span className="text-muted-foreground font-normal">{displaySales.length}</span>
+              </span>
+              <div className="ml-auto flex items-center gap-2 flex-wrap">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search brand, date..."
+                    value={srSearchQuery}
+                    onChange={e => { setSrSearchQuery(e.target.value); setSrPage(1); }}
+                    data-testid="input-search-sales-records"
+                    className="pl-8 pr-8 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 w-48 sm:w-56"
+                  />
+                  {srSearchQuery && (
+                    <button onClick={() => setSrSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+                  )}
+                </div>
+
+                {/* Sort */}
+                <Popover open={srSortOpen} onOpenChange={setSrSortOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-sort-sales-records">
+                      <ArrowUpDown className="w-3.5 h-3.5" />
+                      Sort
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56 p-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase px-2 mb-1">Sort by</p>
+                    {([
+                      ['saleDate', 'Sale Date'],
+                      ['brandNumber', 'Brand No'],
+                      ['brandName', 'Brand Name'],
+                      ['soldBottles', 'Sold Bottles'],
+                      ['saleValue', 'Amount'],
+                    ] as const).map(([field, label]) => (
+                      <button
+                        key={field}
+                        onClick={() => {
+                          if (srSortField === field) setSrSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                          else { setSrSortField(field); setSrSortDir('asc'); }
+                          setSrSortOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-muted ${srSortField === field ? 'text-primary font-medium' : ''}`}
+                      >
+                        {label}
+                        {srSortField === field && <span className="text-xs">{srSortDir === 'asc' ? '↑' : '↓'}</span>}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+
+                {/* Import dropdown */}
+                {user?.role === 'admin' && (
+                  <>
+                    <input
+                      ref={srFileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleSrImport(f); }}
+                    />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-sr-import">
+                          <Upload className="w-3.5 h-3.5" />
+                          Import
+                          <ChevronDown className="w-3 h-3 ml-0.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuItem onClick={() => srFileInputRef.current?.click()} data-testid="dropdown-sr-import-file">
+                          <Upload className="w-4 h-4 mr-2" /> Import from Excel / CSV
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <a href="/sales_import_template.xlsx" download data-testid="dropdown-sr-template">
+                            <FileSpreadsheet className="w-4 h-4 mr-2" /> Download sample template
+                          </a>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          data-testid="dropdown-sr-export"
+                          onClick={() => {
+                            const rows = displaySales;
+                            const header = ['Sale Date', 'Brand No', 'Brand Name', 'Size', 'Qty/Cs', 'Sold Btls', 'Amount'];
+                            const csv = [header, ...rows.map(r => [r.saleDate, r.brandNumber, r.brandName, r.size, r.quantityPerCase, r.soldBottles, r.totalSaleValue ?? r.saleValue])].map(row => row.join(',')).join('\n');
+                            const blob = new Blob([csv], { type: 'text/csv' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a'); a.href = url; a.download = 'sales_records.csv'; a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          <FileText className="w-4 h-4 mr-2" /> Export current view ({displaySales.length})
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                )}
+
+                {/* Refresh */}
+                <Button variant="ghost" size="sm" onClick={() => refetchSales()} data-testid="button-sr-refresh" className="gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Sales Records Table */}
+            {isLoadingSales ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : displaySales.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <div className="p-4 bg-muted/50 rounded-full">
+                  <BarChart2 className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-semibold text-foreground mb-1">No sales records yet</p>
+                  <p className="text-sm text-muted-foreground">Import a sales archive or add entries manually.</p>
+                </div>
+                <div className="flex gap-2">
+                  {user?.role === 'admin' && (
+                    <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5" onClick={() => srFileInputRef.current?.click()} data-testid="button-sr-empty-import">
+                      <Upload className="w-3.5 h-3.5" /> Import sales archive
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-sr-empty-add">
+                    <Plus className="w-3.5 h-3.5" /> Add manually
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="py-2.5 px-3 text-left text-xs font-semibold text-muted-foreground w-10">#</th>
+                        <th
+                          className="py-2.5 px-3 text-left text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground select-none"
+                          onClick={() => { if (srSortField === 'saleDate') setSrSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSrSortField('saleDate'); setSrSortDir('desc'); } }}
+                        >
+                          Sale Date {srSortField === 'saleDate' && (srSortDir === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th
+                          className="py-2.5 px-3 text-left text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground select-none"
+                          onClick={() => { if (srSortField === 'brandNumber') setSrSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSrSortField('brandNumber'); setSrSortDir('asc'); } }}
+                        >
+                          Brand No {srSortField === 'brandNumber' && (srSortDir === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th
+                          className="py-2.5 px-3 text-left text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground select-none"
+                          onClick={() => { if (srSortField === 'brandName') setSrSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSrSortField('brandName'); setSrSortDir('asc'); } }}
+                        >
+                          Brand Name {srSortField === 'brandName' && (srSortDir === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th className="py-2.5 px-3 text-left text-xs font-semibold text-muted-foreground">Size</th>
+                        <th
+                          className="py-2.5 px-3 text-right text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground select-none"
+                          onClick={() => { if (srSortField === 'soldBottles') setSrSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSrSortField('soldBottles'); setSrSortDir('desc'); } }}
+                        >
+                          Sold Btls {srSortField === 'soldBottles' && (srSortDir === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th
+                          className="py-2.5 px-3 text-right text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground select-none"
+                          onClick={() => { if (srSortField === 'saleValue') setSrSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSrSortField('saleValue'); setSrSortDir('desc'); } }}
+                        >
+                          Amount {srSortField === 'saleValue' && (srSortDir === 'asc' ? '↑' : '↓')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displaySales.slice((srPage - 1) * srPageSize, srPage * srPageSize).map((row, idx) => (
+                        <tr
+                          key={row.id}
+                          data-testid={`row-sales-record-${row.id}`}
+                          className="border-b border-border/60 hover:bg-muted/30 transition-colors"
+                        >
+                          <td className="py-2.5 px-3 text-muted-foreground text-xs">{(srPage - 1) * srPageSize + idx + 1}</td>
+                          <td className="py-2.5 px-3 font-medium text-foreground">{row.saleDate || '—'}</td>
+                          <td className="py-2.5 px-3 text-muted-foreground">{row.brandNumber}</td>
+                          <td className="py-2.5 px-3 text-foreground">{row.brandName}</td>
+                          <td className="py-2.5 px-3 text-muted-foreground">{row.size}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-foreground">{row.soldBottles?.toLocaleString() ?? '—'}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-foreground">
+                            {row.totalSaleValue != null
+                              ? `₹${parseFloat(row.totalSaleValue as string).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                              : row.saleValue != null
+                              ? `₹${parseFloat(row.saleValue as string).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination */}
+                {Math.ceil(displaySales.length / srPageSize) > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
+                    <span className="text-xs text-muted-foreground">
+                      Showing {(srPage - 1) * srPageSize + 1}–{Math.min(srPage * srPageSize, displaySales.length)} of {displaySales.length}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" disabled={srPage === 1} onClick={() => setSrPage(p => p - 1)} className="h-7 px-2 text-xs">Prev</Button>
+                      {Array.from({ length: Math.ceil(displaySales.length / srPageSize) }, (_, i) => i + 1).filter(p => p === 1 || p === Math.ceil(displaySales.length / srPageSize) || Math.abs(p - srPage) <= 1).map((p, i, arr) => (
+                        <>
+                          {i > 0 && arr[i - 1] !== p - 1 && <span key={`ellipsis-${p}`} className="text-xs text-muted-foreground px-1">…</span>}
+                          <Button key={p} variant={p === srPage ? 'default' : 'outline'} size="sm" onClick={() => setSrPage(p)} className="h-7 px-2.5 text-xs min-w-[28px]">{p}</Button>
+                        </>
+                      ))}
+                      <Button variant="outline" size="sm" disabled={srPage === Math.ceil(displaySales.length / srPageSize)} onClick={() => setSrPage(p => p + 1)} className="h-7 px-2 text-xs">Next</Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {isSrImporting && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-primary/5 border-t border-border text-sm text-primary">
+                <Loader2 className="w-4 h-4 animate-spin" /> Importing sales records...
+              </div>
+            )}
           </div>
         )}
 
