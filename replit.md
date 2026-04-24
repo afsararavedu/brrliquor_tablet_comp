@@ -16,8 +16,19 @@ BRR Liquor Soft (BRR IT Solutions) is a full-stack sales management dashboard ap
 ### Invoice Tracking
 - Orders table has `invoice_date` and `icdc_number` columns for tracking invoices
 - PDF parser extracts Invoice Date and ICDC Number from the PDF header and applies them to all parsed rows
-- Saved Orders section on Inventory page supports filtering by invoice_date and icdc_number
-- API endpoint: GET /api/orders?invoice_date=X&icdc_number=Y
+- Inventory page loads all orders and filters client-side (date range, ICDC, brand no, text search)
+- API endpoint: GET /api/orders (fetches all; client handles filtering)
+
+### Inventory Page Design
+- Airtable-style single-view layout (no tabs) matching the screenshot design
+- Stats cards: ICDC Invoices, Total Cases (+ bottles), Stock Value, This Month lines
+- Toolbar: inline search, Filter popover (quick range + from/to date + ICDC + brand no), Sort popover (per column asc/desc), Import dropdown (upload / template / export), Add Entry button, Settings gear (Sales MRP + Import Sales Data admin)
+- Table with checkboxes, inline row edit/delete, sortable column headers
+- Empty state with "Import ICDC file" and "+ Add manually" CTAs
+- Keyboard shortcuts bar: / Search, n New entry, r Refresh, Esc Clear selection
+- Manual entry in a Dialog (multi-row table)
+- Sales MRP management in a Dialog
+- Import Sales Data (admin only) in a Dialog
 
 ### Shop Details Extraction
 - `shop_details` table stores metadata from PDF invoice headers: Name, Address, Retail Shop Excise Tax, License No, PAN Number, Name & Phone, Invoice Date, Gazette Code & Licensee Issue Date, ICDC Number
