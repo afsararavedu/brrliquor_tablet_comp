@@ -798,8 +798,8 @@ export default function Inventory() {
       <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
 
         {/* TOOLBAR */}
+        {activeView === 'invoices' && (
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-wrap">
-          {activeView === 'invoices' && (
           <div className="ml-auto flex items-center gap-2 flex-wrap">
             {/* Search */}
             <div className="relative">
@@ -990,8 +990,8 @@ export default function Inventory() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          )}
         </div>
+        )}
 
         {/* ======= INVOICES TAB CONTENT ======= */}
         {activeView === 'invoices' && (<>
