@@ -608,12 +608,12 @@ export default function Inventory() {
         <TabsContent value="import" className="space-y-8">
 
           {/* File Upload Section */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-3">
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-3">
               <h2 className="text-xl font-bold font-display mb-4 text-foreground">Import Invoice cum Delivery Data</h2>
             </div>
             
-            <div className="md:col-span-2 bg-card rounded-2xl border border-border p-4 shadow-sm hover:shadow-md transition-all">
+            <div className="lg:col-span-2 bg-card rounded-2xl border border-border p-4 shadow-sm hover:shadow-md transition-all">
               <div className="flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/20 rounded-xl p-4 bg-secondary/10 hover:bg-secondary/30 transition-colors h-full">
                 <div className="p-2 bg-primary/5 rounded-full mb-2">
                   <UploadCloud className="w-6 h-6 text-primary" />
@@ -651,7 +651,7 @@ export default function Inventory() {
               </div>
             </div>
 
-            <div className="md:col-span-1 bg-gradient-to-br from-primary/90 to-orange-600 rounded-2xl p-4 text-white shadow-lg shadow-primary/25 flex flex-col justify-between">
+            <div className="lg:col-span-1 bg-gradient-to-br from-primary/90 to-orange-600 rounded-2xl p-4 text-white shadow-lg shadow-primary/25 flex flex-col justify-between">
               <div>
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mb-3 backdrop-blur-sm">
                   <FileSpreadsheet className="w-5 h-5 text-white" />
@@ -971,9 +971,9 @@ export default function Inventory() {
           {/* Manual Entry Section - Admin Only */}
           {user?.role === 'admin' && (
           <section>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
               <h2 className="text-xl font-bold font-display text-foreground">Manual Order Entry</h2>
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
                 <button 
                   onClick={addRow}
                   className="flex items-center gap-2 px-4 py-2 bg-secondary text-foreground rounded-lg font-medium hover:bg-secondary/80 border border-border transition-all"
