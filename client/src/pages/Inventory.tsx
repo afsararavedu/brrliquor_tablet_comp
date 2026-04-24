@@ -616,7 +616,7 @@ export default function Inventory() {
       <input ref={fileInputRef} type="file" accept=".csv,.xls,.xlsx,.pdf" onChange={handleFileChange} className="hidden" />
 
       {/* ===================== STATS CARDS ===================== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">ICDC Invoices</p>
