@@ -5,6 +5,7 @@ import {
 } from "date-fns";
 import { useBulkCreateOrders, useUploadFile } from "@/hooks/use-orders";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import {
   UploadCloud,
   File,
@@ -746,21 +747,49 @@ export default function Inventory() {
     setMrpSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
 
-  const handleBulkDeleteMrp = async () => {
+  const handleBulkDeleteMrp = () => {
     const ids = Array.from(mrpSelectedIds);
     if (ids.length === 0) return;
     if (!confirm(`Delete ${ids.length} selected MRP record${ids.length === 1 ? "" : "s"}?`)) return;
-    setIsBulkDeletingMrp(true);
-    try {
-      await apiRequest("DELETE", "/api/sales-mrp", { ids });
-      setMrpSelectedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ["/api/sales-mrp"] });
-      toast({ title: `Deleted ${ids.length} record${ids.length === 1 ? "" : "s"}`, className: "bg-green-50 text-green-800" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
-      setIsBulkDeletingMrp(false);
-    }
+    setMrpSelectedIds(new Set());
+
+    let undone = false;
+
+    const { dismiss } = toast({
+      title: `Deleting ${ids.length} record${ids.length === 1 ? "" : "s"}…`,
+      description: "Click Undo to cancel before deletion completes.",
+      className: "bg-green-50 text-green-800",
+      duration: 5500,
+      action: (
+        <ToastAction
+          altText="Undo delete"
+          data-testid="button-undo-bulk-delete-mrp"
+          onClick={() => {
+            undone = true;
+            dismiss();
+            toast({ title: "Deletion cancelled", description: "Your records have been restored.", className: "bg-blue-50 text-blue-800" });
+          }}
+        >
+          Undo
+        </ToastAction>
+      ),
+    });
+
+    setTimeout(async () => {
+      if (undone) return;
+      dismiss();
+      setIsBulkDeletingMrp(true);
+      try {
+        await apiRequest("DELETE", "/api/sales-mrp", { ids });
+        queryClient.invalidateQueries({ queryKey: ["/api/sales-mrp"] });
+        toast({ title: `Deleted ${ids.length} record${ids.length === 1 ? "" : "s"}`, className: "bg-green-50 text-green-800" });
+      } catch (err: any) {
+        toast({ title: "Error deleting records", description: err.message, variant: "destructive" });
+        setMrpSelectedIds(new Set(ids));
+      } finally {
+        setIsBulkDeletingMrp(false);
+      }
+    }, 5000);
   };
   const visibleSrIds = displaySales.slice((srPage - 1) * srPageSize, srPage * srPageSize).map(r => r.id);
   const allVisibleSrSelected = visibleSrIds.length > 0 && visibleSrIds.every(id => srSelectedIds.has(id));
