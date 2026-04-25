@@ -1,10 +1,16 @@
 -- ============================================================
-  -- sales_mrp_details — INSERT script (182 records)
-  -- Exported from production on 2026-04-25
-  -- Usage: Run in your PostgreSQL client to seed the table.
-  --        Uses ON CONFLICT ... DO UPDATE so it is safe to re-run.
-  -- ============================================================
+-- sales_mrp_details — INSERT script (182 records)
+-- Exported from production on 2026-04-25
+-- Usage: Run in your PostgreSQL client to seed the table.
+--        Uses ON CONFLICT ... DO UPDATE so it is safe to re-run.
+-- ============================================================
 
+-- Step 1: Create the unique constraint if it does not already exist
+-- (required for the ON CONFLICT clause below to work)
+CREATE UNIQUE INDEX IF NOT EXISTS sales_mrp_details_brand_number_brand_name_size_key
+  ON sales_mrp_details (brand_number, brand_name, size);
+
+-- Step 2: Insert all records
 INSERT INTO sales_mrp_details (brand_number, brand_name, size, sales_mrp, product_type)
 VALUES
   ('9099', 'JOHNNIE WALKER RED LABEL BLENDED SCOTCH WHISKY Duty Paid', '750 ml', 2610.00, 'IML'),
