@@ -19,6 +19,9 @@ import {
   Trash2,
   Check,
   X,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { type DailySale, type ShopDetail, type Order } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -199,6 +202,8 @@ export default function Sales() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [salesSortField, setSalesSortField] = useState<'brandNumber' | 'mrp' | 'soldBottles' | null>(null);
+  const [salesSortDir, setSalesSortDir] = useState<'asc' | 'desc'>('asc');
 
   // Bulk Excel upload state
   const excelFileInputRef = useRef<HTMLInputElement>(null);
@@ -778,11 +783,35 @@ export default function Sales() {
     });
   };
 
-  const filteredSales = localSales.filter(
-    (item) =>
-      item.brandName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.brandNumber.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  const handleSalesSortToggle = (field: 'brandNumber' | 'mrp' | 'soldBottles') => {
+    if (salesSortField === field) {
+      setSalesSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSalesSortField(field);
+      setSalesSortDir('asc');
+    }
+    setCurrentPage(1);
+  };
+
+  const filteredSales = useMemo(() => {
+    let rows = localSales.filter(
+      (item) =>
+        item.brandName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.brandNumber.toLowerCase().includes(searchTerm.toLowerCase()),
+    );
+    if (salesSortField) {
+      rows = [...rows].sort((a, b) => {
+        let av: number | string = 0, bv: number | string = 0;
+        if (salesSortField === 'brandNumber') { av = a.brandNumber; bv = b.brandNumber; }
+        else if (salesSortField === 'mrp') { av = parseFloat(a.mrp as string) || 0; bv = parseFloat(b.mrp as string) || 0; }
+        else if (salesSortField === 'soldBottles') { av = a.soldBottles ?? 0; bv = b.soldBottles ?? 0; }
+        if (av < bv) return salesSortDir === 'asc' ? -1 : 1;
+        if (av > bv) return salesSortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return rows;
+  }, [localSales, searchTerm, salesSortField, salesSortDir]);
 
   const totalPages = Math.ceil(filteredSales.length / pageSize);
   const paginatedSales = filteredSales.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -1124,7 +1153,11 @@ export default function Sales() {
             <thead>
               <tr className="bg-secondary/30">
                 <th className="table-header w-8 border-r border-border">SNo</th>
-                <th className="table-header w-14 border-r border-border">Brand No</th>
+                <th className="table-header w-14 border-r border-border">
+                  <button onClick={() => handleSalesSortToggle('brandNumber')} className="flex items-center gap-1 hover:text-foreground w-full">
+                    Brand No {salesSortField === 'brandNumber' ? (salesSortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
+                  </button>
+                </th>
                 <th className="table-header w-24 border-r border-border">Brand Name</th>
                 <th className="table-header w-12 border-r border-border">Size</th>
                 <th className="table-header w-10 border-r border-border">Qty/Cs</th>
@@ -1138,8 +1171,16 @@ export default function Sales() {
                 <th className="table-header w-20 text-center bg-orange-50/80 font-bold text-orange-900 border-r border-border">
                   Cls Bal (Btls)
                 </th>
-                <th className="table-header w-14 text-center border-r border-border">Sold Btls</th>
-                <th className="table-header w-14 text-center border-r border-border">MRP</th>
+                <th className="table-header w-14 text-center border-r border-border">
+                  <button onClick={() => handleSalesSortToggle('soldBottles')} className="flex items-center gap-1 hover:text-foreground mx-auto">
+                    Sold Btls {salesSortField === 'soldBottles' ? (salesSortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
+                  </button>
+                </th>
+                <th className="table-header w-14 text-center border-r border-border">
+                  <button onClick={() => handleSalesSortToggle('mrp')} className="flex items-center gap-1 hover:text-foreground mx-auto">
+                    MRP {salesSortField === 'mrp' ? (salesSortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
+                  </button>
+                </th>
                 <th className="table-header w-20 text-right font-bold text-primary border-r border-border">Sale Value</th>
                 <th className="table-header w-16 text-center border-r border-border">Tot Cls Stk</th>
                 <th className="table-header w-14 text-center border-r border-border">Breakage</th>
