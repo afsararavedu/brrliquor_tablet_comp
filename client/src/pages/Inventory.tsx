@@ -227,6 +227,8 @@ export default function Inventory() {
   const [mrpFilterBrandName, setMrpFilterBrandName] = useState('');
   const [mrpPendingBrandNo, setMrpPendingBrandNo] = useState('');
   const [mrpPendingBrandName, setMrpPendingBrandName] = useState('');
+  const [mrpFilterBrandNoComboOpen, setMrpFilterBrandNoComboOpen] = useState(false);
+  const [mrpFilterDescComboOpen, setMrpFilterDescComboOpen] = useState(false);
   const [showMrpFormDialog, setShowMrpFormDialog] = useState(false);
   const [mrpSelectedIds, setMrpSelectedIds] = useState<Set<number>>(new Set());
   const [isBulkDeletingMrp, setIsBulkDeletingMrp] = useState(false);
@@ -318,6 +320,10 @@ export default function Inventory() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/sales-mrp"] }); toast({ title: "Deleted", className: "bg-green-50 text-green-800" }); },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
+
+  // Unique values for MRP filter comboboxes (from full dataset, not cascaded)
+  const uniqueFilterMrpBrandNos = Array.from(new Set((salesMrpData || []).map(r => r.brandNumber))).sort();
+  const uniqueFilterMrpBrandNames = Array.from(new Set((salesMrpData || []).map(r => r.brandName))).sort();
 
   // MRP cascading dropdowns
   const allMrpOrders = allOrdersForMrp || [];
@@ -1376,25 +1382,95 @@ export default function Inventory() {
                     <h3 className="font-semibold text-foreground mb-3">Filters</h3>
                     <div className="mb-3">
                       <label className="text-xs font-medium text-muted-foreground">Brand No</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 0019"
-                        className="mt-1 block w-full border border-border rounded-lg px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        value={mrpPendingBrandNo}
-                        onChange={e => setMrpPendingBrandNo(e.target.value)}
-                        data-testid="input-mrp-filter-brand-no"
-                      />
+                      <Popover open={mrpFilterBrandNoComboOpen} onOpenChange={setMrpFilterBrandNoComboOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            data-testid="combobox-mrp-filter-brand-no"
+                            className="mt-1 flex items-center justify-between w-full border border-border rounded-lg px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 text-left"
+                            role="combobox"
+                          >
+                            <span className={mrpPendingBrandNo ? "text-foreground" : "text-muted-foreground"}>
+                              {mrpPendingBrandNo || "All brand numbers"}
+                            </span>
+                            <ChevronsUpDown className="w-3.5 h-3.5 shrink-0 opacity-50" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[220px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search brand no..." />
+                            <CommandList>
+                              <CommandEmpty>No brand no found.</CommandEmpty>
+                              <CommandGroup>
+                                {mrpPendingBrandNo && (
+                                  <CommandItem value="__clear__" onSelect={() => { setMrpPendingBrandNo(''); setMrpFilterBrandNoComboOpen(false); }}>
+                                    <X className="mr-2 h-4 w-4 text-muted-foreground" /> Clear
+                                  </CommandItem>
+                                )}
+                                {uniqueFilterMrpBrandNos.map(bn => (
+                                  <CommandItem
+                                    key={bn}
+                                    value={bn}
+                                    onSelect={val => {
+                                      const original = uniqueFilterMrpBrandNos.find(n => n.toLowerCase() === val.toLowerCase()) ?? val;
+                                      setMrpPendingBrandNo(original === mrpPendingBrandNo ? '' : original);
+                                      setMrpFilterBrandNoComboOpen(false);
+                                    }}
+                                  >
+                                    <Check className={cn("mr-2 h-4 w-4", mrpPendingBrandNo === bn ? "opacity-100" : "opacity-0")} />
+                                    {bn}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div className="mb-4">
-                      <label className="text-xs font-medium text-muted-foreground">Brand Name</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Kingfisher"
-                        className="mt-1 block w-full border border-border rounded-lg px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        value={mrpPendingBrandName}
-                        onChange={e => setMrpPendingBrandName(e.target.value)}
-                        data-testid="input-mrp-filter-brand-name"
-                      />
+                      <label className="text-xs font-medium text-muted-foreground">Product Description</label>
+                      <Popover open={mrpFilterDescComboOpen} onOpenChange={setMrpFilterDescComboOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            data-testid="combobox-mrp-filter-product-desc"
+                            className="mt-1 flex items-center justify-between w-full border border-border rounded-lg px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 text-left"
+                            role="combobox"
+                          >
+                            <span className={mrpPendingBrandName ? "text-foreground" : "text-muted-foreground"}>
+                              {mrpPendingBrandName || "All descriptions"}
+                            </span>
+                            <ChevronsUpDown className="w-3.5 h-3.5 shrink-0 opacity-50" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[220px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search description..." />
+                            <CommandList>
+                              <CommandEmpty>No description found.</CommandEmpty>
+                              <CommandGroup>
+                                {mrpPendingBrandName && (
+                                  <CommandItem value="__clear__" onSelect={() => { setMrpPendingBrandName(''); setMrpFilterDescComboOpen(false); }}>
+                                    <X className="mr-2 h-4 w-4 text-muted-foreground" /> Clear
+                                  </CommandItem>
+                                )}
+                                {uniqueFilterMrpBrandNames.map(bn => (
+                                  <CommandItem
+                                    key={bn}
+                                    value={bn}
+                                    onSelect={val => {
+                                      const original = uniqueFilterMrpBrandNames.find(n => n.toLowerCase() === val.toLowerCase()) ?? val;
+                                      setMrpPendingBrandName(original === mrpPendingBrandName ? '' : original);
+                                      setMrpFilterDescComboOpen(false);
+                                    }}
+                                  >
+                                    <Check className={cn("mr-2 h-4 w-4", mrpPendingBrandName === bn ? "opacity-100" : "opacity-0")} />
+                                    {bn}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={handleMrpResetFilter} className="flex-1 py-1.5 text-sm border border-border rounded-lg hover:bg-muted transition-colors" data-testid="button-mrp-reset-filters">Reset</button>
