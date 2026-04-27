@@ -917,7 +917,7 @@ export default function Inventory() {
       </div>
 
       {/* ===================== STATS CARDS ===================== */}
-      {activeView !== 'import-sales' ? (
+      {activeView === 'invoices' ? (
         <div className="grid grid-cols-4 gap-3">
           <div className="bg-card border border-border rounded-xl p-4 flex items-start justify-between shadow-sm">
             <div>
@@ -947,6 +947,81 @@ export default function Inventory() {
               <p className="text-2xl font-bold text-foreground">{stats.thisMonthLines} <span className="text-base font-normal text-muted-foreground">lines</span></p>
             </div>
             <div className="p-2 bg-orange-50 rounded-lg"><CalendarIcon className="w-5 h-5 text-orange-500" /></div>
+          </div>
+        </div>
+      ) : activeView === 'mrp' ? (
+        /* ===== Inline Add Sales MRP Form ===== */
+        <div className="bg-card border border-border rounded-xl px-4 py-3 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Tag className="w-4 h-4 text-primary" />
+            <span className="text-sm font-semibold text-foreground">Add Sales MRP</span>
+            <span className="text-xs text-muted-foreground">Select brand details and enter the Sales MRP.</span>
+          </div>
+          <div className="flex flex-wrap gap-3 items-end">
+            {/* Brand No */}
+            <div className="flex flex-col gap-1 min-w-[120px] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">Brand No</label>
+              <Popover open={brandNoComboOpen} onOpenChange={setBrandNoComboOpen}>
+                <PopoverTrigger asChild>
+                  <button data-testid="inline-select-mrp-brand-number" className="input-field flex items-center justify-between text-left w-full" role="combobox">
+                    <span className={mrpBrandNumber ? "text-foreground text-sm" : "text-muted-foreground text-sm"}>{mrpBrandNumber || "-- Select --"}</span>
+                    <ChevronsUpDown className="w-3.5 h-3.5 shrink-0 opacity-50 ml-1" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search brand no..." />
+                    <CommandList>
+                      <CommandEmpty>No brand found.</CommandEmpty>
+                      <CommandGroup>
+                        {uniqueBrandNumbers.map(bn => (
+                          <CommandItem key={bn} value={bn} onSelect={val => { const original = uniqueBrandNumbers.find(n => n.toLowerCase() === val.toLowerCase()) ?? val; handleMrpBrandNumberChange(original === mrpBrandNumber ? "" : original); setBrandNoComboOpen(false); }}>
+                            <Check className={cn("mr-2 h-4 w-4", mrpBrandNumber === bn ? "opacity-100" : "opacity-0")} />{bn}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            {/* Brand Name */}
+            <div className="flex flex-col gap-1 min-w-[160px] flex-[2]">
+              <label className="text-xs font-medium text-muted-foreground">Brand Name</label>
+              <select className="input-field w-full text-sm" value={mrpBrandName} onChange={e => handleMrpBrandNameChange(e.target.value)} disabled={!mrpBrandNumber} data-testid="inline-select-mrp-brand-name">
+                <option value="">-- Select --</option>
+                {uniqueBrandNames.map(bn => <option key={bn} value={bn}>{bn}</option>)}
+              </select>
+            </div>
+            {/* Type */}
+            <div className="flex flex-col gap-1 min-w-[110px] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">Type</label>
+              <select className="input-field w-full text-sm" value={mrpProductType} onChange={e => handleMrpTypeChange(e.target.value)} disabled={!mrpBrandName} data-testid="inline-select-mrp-product-type">
+                <option value="">-- Select --</option>
+                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            {/* Size */}
+            <div className="flex flex-col gap-1 min-w-[100px] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">Size</label>
+              <select className="input-field w-full text-sm" value={mrpSize} onChange={e => setMrpSize(e.target.value)} disabled={!mrpProductType} data-testid="inline-select-mrp-size">
+                <option value="">-- Select --</option>
+                {uniqueSizes.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            {/* Sales MRP */}
+            <div className="flex flex-col gap-1 min-w-[110px] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">Sales MRP (₹)</label>
+              <input type="number" min="0" step="0.01" placeholder="e.g. 250" className="input-field text-right font-mono w-full text-sm" value={mrpValue} onChange={e => setMrpValue(e.target.value === "" ? "" : parseFloat(e.target.value))} data-testid="inline-input-mrp-value" />
+            </div>
+            {/* Save button */}
+            <div className="flex flex-col gap-1 justify-end">
+              <label className="text-xs font-medium text-muted-foreground invisible select-none">Save</label>
+              <Button onClick={handleSaveMrp} disabled={isSavingMrp} data-testid="inline-button-save-mrp" className="whitespace-nowrap">
+                {isSavingMrp ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Save className="w-4 h-4 mr-1.5" />}
+                Save MRP
+              </Button>
+            </div>
           </div>
         </div>
       ) : (
