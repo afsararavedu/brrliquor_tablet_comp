@@ -30,6 +30,10 @@ import {
   ArrowDown,
   ArrowUpDown,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Settings2,
   RefreshCw,
   FileText,
@@ -232,6 +236,8 @@ export default function Inventory() {
   const [showMrpFormDialog, setShowMrpFormDialog] = useState(false);
   const [mrpSelectedIds, setMrpSelectedIds] = useState<Set<number>>(new Set());
   const [isBulkDeletingMrp, setIsBulkDeletingMrp] = useState(false);
+  const [mrpCurrentPage, setMrpCurrentPage] = useState(1);
+  const [mrpRowsPerPage, setMrpRowsPerPage] = useState(10);
   const [srSelectedIds, setSrSelectedIds] = useState<Set<number>>(new Set());
   const [isBulkDeletingSr, setIsBulkDeletingSr] = useState(false);
 
@@ -468,6 +474,10 @@ export default function Inventory() {
     return records;
   }, [salesMrpData, mrpSearch, mrpFilterBrandNo, mrpFilterBrandName, mrpSortField, mrpSortDir]);
 
+  const mrpTotalPages = Math.max(1, Math.ceil(displayMrpRecords.length / mrpRowsPerPage));
+  const mrpPageStart = (mrpCurrentPage - 1) * mrpRowsPerPage;
+  const paginatedMrpRecords = displayMrpRecords.slice(mrpPageStart, mrpPageStart + mrpRowsPerPage);
+
   const hasMrpActiveFilters = !!(mrpFilterBrandNo || mrpFilterBrandName);
 
   const handleMrpOpenFilter = () => {
@@ -479,6 +489,7 @@ export default function Inventory() {
     setMrpFilterBrandNo(mrpPendingBrandNo);
     setMrpFilterBrandName(mrpPendingBrandName);
     setMrpFilterOpen(false);
+    setMrpCurrentPage(1);
   };
   const handleMrpResetFilter = () => {
     setMrpPendingBrandNo('');
@@ -737,7 +748,7 @@ export default function Inventory() {
   };
   const handleDeleteMrp = (id: number) => { if (!confirm("Delete this Sales MRP record?")) return; deleteSalesMrp(id); };
 
-  const visibleMrpIds = displayMrpRecords.map(r => r.id);
+  const visibleMrpIds = paginatedMrpRecords.map(r => r.id);
   const allVisibleMrpSelected = visibleMrpIds.length > 0 && visibleMrpIds.every(id => mrpSelectedIds.has(id));
   const someVisibleMrpSelected = visibleMrpIds.some(id => mrpSelectedIds.has(id)) && !allVisibleMrpSelected;
 
@@ -1606,6 +1617,7 @@ export default function Inventory() {
             {isLoadingMrp ? (
               <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
             ) : displayMrpRecords.length > 0 ? (
+              <>
               <div className="overflow-x-auto table-typography">
                 <table className="w-full">
                   <thead>
@@ -1648,7 +1660,7 @@ export default function Inventory() {
                     </tr>
                   </thead>
                   <tbody>
-                    {displayMrpRecords.map((row, idx) => (
+                    {paginatedMrpRecords.map((row, idx) => (
                       <tr key={row.id} className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${mrpSelectedIds.has(row.id) ? "bg-primary/5" : ""}`} data-testid={`row-sales-mrp-${row.id}`}>
                         <td className="px-3 py-2.5">
                           <Checkbox
@@ -1658,7 +1670,7 @@ export default function Inventory() {
                             aria-label={`Select MRP row ${row.id}`}
                           />
                         </td>
-                        <td className="table-cell text-center text-xs text-muted-foreground">{idx + 1}</td>
+                        <td className="table-cell text-center text-xs text-muted-foreground">{mrpPageStart + idx + 1}</td>
                         <td className="table-cell font-mono text-xs text-muted-foreground">{row.brandNumber}</td>
                         <td className="table-cell font-medium">{row.brandName}</td>
                         <td className="table-cell text-muted-foreground">{row.productType}</td>
@@ -1675,6 +1687,41 @@ export default function Inventory() {
                   </tbody>
                 </table>
               </div>
+              {/* Pagination */}
+              <div className="flex items-center justify-between px-3 py-2.5 border-t border-border bg-muted/20">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Rows per page:</span>
+                  <div className="flex items-center gap-1">
+                    {[10, 15, 20].map(n => (
+                      <button
+                        key={n}
+                        onClick={() => { setMrpRowsPerPage(n); setMrpCurrentPage(1); }}
+                        className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${mrpRowsPerPage === n ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}
+                        data-testid={`button-mrp-rows-${n}`}
+                      >{n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <span className="mr-2">
+                    {displayMrpRecords.length === 0 ? "0" : `${mrpPageStart + 1}–${Math.min(mrpPageStart + mrpRowsPerPage, displayMrpRecords.length)}`} of {displayMrpRecords.length}
+                  </span>
+                  <button onClick={() => setMrpCurrentPage(1)} disabled={mrpCurrentPage === 1} className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed" data-testid="button-mrp-first-page" title="First page"><ChevronsLeft className="w-4 h-4" /></button>
+                  <button onClick={() => setMrpCurrentPage(p => Math.max(1, p - 1))} disabled={mrpCurrentPage === 1} className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed" data-testid="button-mrp-prev-page" title="Previous page"><ChevronLeft className="w-4 h-4" /></button>
+                  {Array.from({ length: mrpTotalPages }, (_, i) => i + 1).filter(p => p === 1 || p === mrpTotalPages || Math.abs(p - mrpCurrentPage) <= 1).reduce<(number | string)[]>((acc, p, i, arr) => {
+                    if (i > 0 && (p as number) - (arr[i - 1] as number) > 1) acc.push("...");
+                    acc.push(p);
+                    return acc;
+                  }, []).map((p, i) => p === "..." ? (
+                    <span key={`ellipsis-${i}`} className="px-1 text-xs text-muted-foreground">…</span>
+                  ) : (
+                    <button key={p} onClick={() => setMrpCurrentPage(p as number)} className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${mrpCurrentPage === p ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`} data-testid={`button-mrp-page-${p}`}>{p}</button>
+                  ))}
+                  <button onClick={() => setMrpCurrentPage(p => Math.min(mrpTotalPages, p + 1))} disabled={mrpCurrentPage === mrpTotalPages} className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed" data-testid="button-mrp-next-page" title="Next page"><ChevronRight className="w-4 h-4" /></button>
+                  <button onClick={() => setMrpCurrentPage(mrpTotalPages)} disabled={mrpCurrentPage === mrpTotalPages} className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed" data-testid="button-mrp-last-page" title="Last page"><ChevronsRight className="w-4 h-4" /></button>
+                </div>
+              </div>
+              </>
             ) : (
               /* MRP Empty State */
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
@@ -2051,15 +2098,6 @@ export default function Inventory() {
 
       </div>
 
-      {/* Keyboard shortcuts bar */}
-      <div className="flex items-center gap-5 text-xs text-muted-foreground px-1 pb-1">
-        {[["/ Search", "/"], ["n New entry", "n"], ["r Refresh", "r"], ["Esc Clear selection", "Esc"]].map(([label]) => (
-          <span key={label} className="flex items-center gap-1.5">
-            <kbd className="px-1.5 py-0.5 bg-muted border border-border rounded text-[10px] font-mono">{label.split(" ")[0]}</kbd>
-            <span>{label.split(" ").slice(1).join(" ")}</span>
-          </span>
-        ))}
-      </div>
 
       {/* ===================== DIALOGS ===================== */}
 
