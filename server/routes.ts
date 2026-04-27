@@ -1590,8 +1590,18 @@ export async function registerRoutes(
   app.get("/api/mrp-template/download", (_req, res) => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([
-      ["brand_number", "brand_name", "size", "sales_mrp", "product_type"],
+      ["brand_number", "brand_name", "size", "sales_mrp", "product_type", "note"],
+      ["0019", "Kingfisher", "650ml", "110", "Beer", "← EXAMPLE ROW (delete before importing)"],
+      ["0042", "Royal Challenge", "750ml", "250", "Whisky", "← EXAMPLE ROW (delete before importing)"],
     ]);
+    ws["!cols"] = [
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 40 },
+    ];
     XLSX.utils.book_append_sheet(wb, ws, "MRP Template");
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
     res.setHeader("Content-Disposition", "attachment; filename=MRP_Import_Template.xlsx");
