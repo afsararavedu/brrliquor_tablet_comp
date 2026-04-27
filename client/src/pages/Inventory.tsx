@@ -486,7 +486,7 @@ export default function Inventory() {
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(displayMrpRecords.length / mrpRowsPerPage));
-    if (mrpPage > maxPage) setMrpPage(maxPage);
+    if (mrpCurrentPage > maxPage) setMrpCurrentPage(maxPage);
   }, [displayMrpRecords.length, mrpRowsPerPage]);
 
   const handleMrpOpenFilter = () => {
