@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import * as XLSX from "xlsx";
 import {
   format, parse, isValid,
   subDays, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfDay, endOfDay,
@@ -1645,14 +1646,27 @@ export default function Inventory() {
                   </DropdownMenu>
                 </div>
 
-                {/* Add Entry */}
+                {/* Export */}
                 <Button
                   size="sm"
+                  variant="outline"
                   className="gap-1.5"
-                  onClick={() => { setMrpEditId(null); setMrpBrandNumber(""); setMrpBrandName(""); setMrpProductType(""); setMrpSize(""); setMrpValue(""); setShowMrpFormDialog(true); }}
-                  data-testid="button-mrp-add-entry"
+                  onClick={() => {
+                    const rows = displayMrpRecords.map(r => ({
+                      brand_number: r.brandNumber,
+                      brand_name: r.brandName,
+                      product_type: r.productType ?? "",
+                      size: r.size,
+                      sales_mrp: r.salesMrp,
+                    }));
+                    const ws = XLSX.utils.json_to_sheet(rows);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Sales MRP");
+                    XLSX.writeFile(wb, `Sales_MRP_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
+                  }}
+                  data-testid="button-mrp-export"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add Entry
+                  <Download className="w-3.5 h-3.5" /> Export
                 </Button>
               </div>
             </div>
