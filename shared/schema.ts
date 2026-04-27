@@ -1,5 +1,5 @@
 
-import { pgTable, text, serial, integer, numeric, date, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, numeric, date, timestamp, boolean, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -31,6 +31,7 @@ export const dailySales = pgTable("daily_sales", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   uniqueIndex("daily_sales_brand_size_date_idx").on(table.brandNumber, table.size, table.saleDate),
+  index("daily_sales_sale_date_idx").on(table.saleDate),
 ]);
 
 // Table for the "Other Data" -> Order Form (matching Image 1)

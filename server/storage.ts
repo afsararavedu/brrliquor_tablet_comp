@@ -18,6 +18,22 @@ import { pool, db } from "./db";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 
+// ── Simple in-memory TTL cache ─────────────────────────────────────────────
+// Prevents repetitive full-table scans for read-heavy, rarely-mutated data
+// (orders, stock_details, sales_mrp_details) on every Sales page load.
+const _cache = new Map<string, { data: unknown; expiry: number }>();
+function _getCache<T>(key: string): T | null {
+  const entry = _cache.get(key);
+  if (!entry || Date.now() > entry.expiry) { _cache.delete(key); return null; }
+  return entry.data as T;
+}
+function _setCache<T>(key: string, data: T, ttlMs: number): T {
+  _cache.set(key, { data, expiry: Date.now() + ttlMs });
+  return data;
+}
+function _invalidate(...keys: string[]) { keys.forEach(k => _cache.delete(k)); }
+// ──────────────────────────────────────────────────────────────────────────
+
 const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
@@ -360,7 +376,10 @@ export class DatabaseStorage implements IStorage {
 
   // Orders
   async getOrders(): Promise<Order[]> {
-    return await db.select().from(orders).orderBy(desc(orders.invoiceDate), desc(orders.id));
+    const cached = _getCache<Order[]>('orders');
+    if (cached) return cached;
+    const result = await db.select().from(orders).orderBy(desc(orders.invoiceDate), desc(orders.id));
+    return _setCache('orders', result, 60_000); // 60s TTL
   }
 
   async getLatestOrderInvoiceDate(): Promise<string | null> {
@@ -424,7 +443,9 @@ export class DatabaseStorage implements IStorage {
       const totalBottles = (isNaN(qtyPerCase) ? 0 : qtyPerCase) * (order.qtyCasesDelivered ?? 0) + (order.qtyBottlesDelivered ?? 0);
       return { ...order, totalBottles };
     });
-    return await db.insert(orders).values(withTotalBottles).returning();
+    const result = await db.insert(orders).values(withTotalBottles).returning();
+    _invalidate('orders');
+    return result;
   }
 
   async updateOrder(id: number, data: Record<string, any>): Promise<Order> {
@@ -441,22 +462,26 @@ export class DatabaseStorage implements IStorage {
     const totalBottles = (isNaN(qtyPerCase) ? 0 : qtyPerCase) * (merged.qtyCasesDelivered ?? 0) + (merged.qtyBottlesDelivered ?? 0);
 
     const result = await db.update(orders).set({ ...fields, totalBottles }).where(eq(orders.id, id)).returning();
+    _invalidate('orders');
     return result[0];
   }
 
   async deleteOrder(id: number): Promise<void> {
     await db.delete(orders).where(eq(orders.id, id));
+    _invalidate('orders');
   }
 
   // Stock
   async getStockDetails(): Promise<StockDetail[]> {
+    const cached = _getCache<StockDetail[]>('stockDetails');
+    if (cached) return cached;
     const existing = await db.select().from(stockDetails).orderBy(sql`CAST(brand_number AS INTEGER)`);
     if (existing.length === 0) {
       // Auto-populate from the most recent daily_stock snapshot
       await this.populateStockFromLatestSnapshot();
-      return await db.select().from(stockDetails).orderBy(sql`CAST(brand_number AS INTEGER)`);
+      return _setCache('stockDetails', await db.select().from(stockDetails).orderBy(sql`CAST(brand_number AS INTEGER)`), 30_000);
     }
-    return existing;
+    return _setCache('stockDetails', existing, 30_000); // 30s TTL
   }
 
   async populateStockFromLatestSnapshot(): Promise<void> {
@@ -495,6 +520,7 @@ export class DatabaseStorage implements IStorage {
         .returning();
       results.push(created);
     }
+    _invalidate('stockDetails');
     return results;
   }
 
@@ -780,10 +806,7 @@ export class DatabaseStorage implements IStorage {
           sizeMatch(sale.size, stock.size ?? '')
         );
       }
-      if (!matchedStock) {
-        // Log the first few unmatched sales to help diagnose matching failures
-        console.log(`[syncDailySalesToStock] NO MATCH for brandNo="${sale.brandNumber}" name="${sale.brandName}" size="${sale.size}" qty=${sale.quantityPerCase} → will INSERT new stock_details row`);
-      }
+      // (no per-brand log — summary printed at end)
 
       const saleMrp = parseFloat(String(sale.mrp ?? '0')) || 0;
       const totalBottles = sale.totalClosingStock ?? 0;
@@ -849,6 +872,7 @@ export class DatabaseStorage implements IStorage {
 
     const updatedStockCount = updateRows.length + insertRows.length;
     console.log(`[syncDailySalesToStock] Done. Updated ${updateRows.length} + inserted ${insertRows.length} stock rows`);
+    _invalidate('stockDetails');
     return { updatedStockCount };
   }
 
@@ -927,7 +951,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSalesMrpDetails(): Promise<SalesMrpDetail[]> {
-    return await db.select().from(salesMrpDetails).orderBy(sql`CAST(brand_number AS INTEGER)`);
+    const cached = _getCache<SalesMrpDetail[]>('salesMrp');
+    if (cached) return cached;
+    const result = await db.select().from(salesMrpDetails).orderBy(sql`CAST(brand_number AS INTEGER)`);
+    return _setCache('salesMrp', result, 120_000); // 2 minute TTL
   }
 
   async upsertSalesMrpDetail(data: InsertSalesMrpDetail): Promise<SalesMrpDetail> {
@@ -938,6 +965,7 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       },
     }).returning();
+    _invalidate('salesMrp');
     return result;
   }
 
@@ -950,11 +978,13 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       },
     }).returning();
+    _invalidate('salesMrp');
     return results.length;
   }
 
   async deleteSalesMrpDetail(id: number): Promise<boolean> {
     const result = await db.delete(salesMrpDetails).where(eq(salesMrpDetails.id, id)).returning();
+    _invalidate('salesMrp');
     return result.length > 0;
   }
 

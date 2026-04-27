@@ -121,8 +121,8 @@ export default function Sales() {
       if (!res.ok) return [];
       return res.json();
     },
-    staleTime: 0,  // Always fetch fresh previous day data
-    gcTime: 0,
+    staleTime: 60_000, // Previous day data doesn't change during a session
+    gcTime: 30_000,
   });
 
   // Earliest order invoice date — used to floor the date picker (disable dates before first delivery)
