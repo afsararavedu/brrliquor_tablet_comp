@@ -237,7 +237,7 @@ export default function Inventory() {
   const [mrpSelectedIds, setMrpSelectedIds] = useState<Set<number>>(new Set());
   const [isBulkDeletingMrp, setIsBulkDeletingMrp] = useState(false);
   const [mrpCurrentPage, setMrpCurrentPage] = useState(1);
-  const [mrpRowsPerPage, setMrpRowsPerPage] = useState(10);
+  const [mrpRowsPerPage, setMrpRowsPerPage] = useState(20);
   const [srSelectedIds, setSrSelectedIds] = useState<Set<number>>(new Set());
   const [isBulkDeletingSr, setIsBulkDeletingSr] = useState(false);
 
@@ -479,6 +479,15 @@ export default function Inventory() {
   const paginatedMrpRecords = displayMrpRecords.slice(mrpPageStart, mrpPageStart + mrpRowsPerPage);
 
   const hasMrpActiveFilters = !!(mrpFilterBrandNo || mrpFilterBrandName);
+
+  useEffect(() => {
+    setMrpCurrentPage(1);
+  }, [mrpSearch, mrpFilterBrandNo, mrpFilterBrandName, mrpSortField, mrpSortDir]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(displayMrpRecords.length / mrpRowsPerPage));
+    if (mrpPage > maxPage) setMrpPage(maxPage);
+  }, [displayMrpRecords.length, mrpRowsPerPage]);
 
   const handleMrpOpenFilter = () => {
     setMrpPendingBrandNo(mrpFilterBrandNo);
@@ -1692,7 +1701,7 @@ export default function Inventory() {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>Rows per page:</span>
                   <div className="flex items-center gap-1">
-                    {[10, 15, 20].map(n => (
+                    {[15, 20, 25].map(n => (
                       <button
                         key={n}
                         onClick={() => { setMrpRowsPerPage(n); setMrpCurrentPage(1); }}

@@ -9,6 +9,7 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   totalItems: number;
+  pageSizeOptions?: number[];
 }
 
 export function PaginationCustom({
@@ -18,6 +19,7 @@ export function PaginationCustom({
   onPageChange,
   onPageSizeChange,
   totalItems,
+  pageSizeOptions = [10, 15, 20],
 }: PaginationProps) {
   const startRange = (currentPage - 1) * pageSize + 1;
   const endRange = Math.min(currentPage * pageSize, totalItems);
@@ -58,7 +60,7 @@ export function PaginationCustom({
               <SelectValue placeholder={pageSize} />
             </SelectTrigger>
             <SelectContent side="top">
-              {[10, 15, 20].map((size) => (
+              {pageSizeOptions.map((size) => (
                 <SelectItem key={size} value={size.toString()}>
                   {size}
                 </SelectItem>
