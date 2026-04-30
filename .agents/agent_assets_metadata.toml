@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "evHFvv8D-FLqtJHQVmh4D"
+uri = "file://artifacts/brr-mobile/assets/images/icon.png"
+type = "image"
+title = "BRR liquor mobile app icon"

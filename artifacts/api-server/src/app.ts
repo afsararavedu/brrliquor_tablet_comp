@@ -31,7 +31,13 @@ app.use(
     },
   }),
 );
-app.use(cors());
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    exposedHeaders: ["set-cookie"],
+  }),
+);
 app.use(
   express.json({
     limit: "10mb",

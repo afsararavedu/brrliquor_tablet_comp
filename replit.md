@@ -8,6 +8,7 @@ pnpm workspace monorepo using TypeScript. Contains the BRR Liquor Soft web app (
 
 - **`artifacts/brr-web/`** — React + Vite frontend, preview path `/` (port 18172 in dev)
 - **`artifacts/api-server/`** — Express 5 backend API, preview path `/api`
+- **`artifacts/brr-mobile/`** — Expo (React Native) mobile companion app, preview path `/brr-mobile/` (port 26176 in dev). Talks to the same `/api/*` backend via cookie-based session (Set-Cookie captured natively + stored in AsyncStorage).
 - **`artifacts/mockup-sandbox/`** — Design/mockup canvas (pre-existing)
 
 ## Stack
