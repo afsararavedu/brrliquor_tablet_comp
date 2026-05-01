@@ -489,7 +489,7 @@ async function parseUploadedFile(buffer: Buffer, filename: string): Promise<{ or
   }
 }
 
-import { setupAuth, requireAuth } from "../auth";
+import { setupAuth, requireAuth, requireAdmin } from "../auth";
 import bcrypt from "bcryptjs";
 
 /** Convert various invoice date formats to YYYY-MM-DD for comparison */
@@ -947,9 +947,9 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/sales-mrp/:id", async (req, res) => {
+  app.delete("/api/sales-mrp/:id", requireAdmin, async (req, res) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
       const deleted = await storage.deleteSalesMrpDetail(id);
       if (!deleted) return res.status(404).json({ message: "Record not found" });
@@ -959,7 +959,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/sales-mrp", async (req, res) => {
+  app.delete("/api/sales-mrp", requireAdmin, async (req, res) => {
     try {
       const schema = z.object({ ids: z.array(z.number().int().positive()) });
       const parsed = schema.safeParse(req.body);
@@ -974,7 +974,7 @@ export async function registerRoutes(
   });
 
   // Bulk upload Sales MRP from Excel
-  app.post("/api/sales-mrp/bulk-upload", upload.single("file"), async (req, res) => {
+  app.post("/api/sales-mrp/bulk-upload", requireAdmin, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded." });
       const ext = req.file.originalname.toLowerCase().split(".").pop() || "";
@@ -1044,10 +1044,8 @@ export async function registerRoutes(
   });
 
   // Import archive / historical daily sales from Excel
-  app.post("/api/sales/import-archive", upload.single("file"), async (req, res) => {
+  app.post("/api/sales/import-archive", requireAdmin, upload.single("file"), async (req, res) => {
     try {
-      const isAdmin = (req.user as any)?.role === "admin";
-      if (!isAdmin) return res.status(403).json({ message: "Admin only" });
       if (!req.file) return res.status(400).json({ message: "No file uploaded." });
       const ext = req.file.originalname.toLowerCase().split(".").pop() || "";
       if (!["xls", "xlsx"].includes(ext)) {
@@ -1210,11 +1208,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.sales.bulkUpdate.path, async (req, res) => {
+  app.post(api.sales.bulkUpdate.path, requireAdmin, async (req, res) => {
     try {
       const { rows: input, deleteIds } = api.sales.bulkUpdate.input.parse(req.body);
       const date = req.query.date as string | undefined;
-      const isAdminUser = (req.user as any)?.role === "admin";
 
       // Resolve effective date: use provided date or default to today
       const effectiveDate = date || new Date().toISOString().split('T')[0];
@@ -1224,19 +1221,11 @@ export async function registerRoutes(
         await storage.deleteAndRevertSales(deleteIds, effectiveDate);
       }
 
+      // Admin can always re-save, even after a date has been "submitted".
       let result: DailySale[];
       if (date) {
-        const isSubmitted = await storage.isSalesSubmittedForDate(date);
-        // Only employees are blocked by submission lock; admin can always re-save
-        if (isSubmitted && !isAdminUser) {
-          return res.status(400).json({ message: "Sales for this date are already submitted and cannot be edited." });
-        }
         result = await storage.bulkUpdateDailySalesForDate(input, date);
       } else {
-        const todaySubmitted = await storage.isSalesSubmittedForDate(effectiveDate);
-        if (todaySubmitted && !isAdminUser) {
-          return res.status(400).json({ message: "Sales for today are already submitted and cannot be edited." });
-        }
         result = await storage.bulkUpdateDailySales(input);
       }
 
@@ -1263,16 +1252,16 @@ export async function registerRoutes(
   });
 
 
-  // Delete a single daily_sales row by ID (admin only or own date)
-  app.delete("/api/sales/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
+  // Delete a single daily_sales row by ID (admin only)
+  app.delete("/api/sales/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
     await storage.deleteDailySale(id);
     res.json({ success: true });
   });
 
   // Bulk delete sales records
-  app.delete("/api/sales", async (req, res) => {
+  app.delete("/api/sales", requireAdmin, async (req, res) => {
     try {
       const schema = z.object({ ids: z.array(z.number().int().positive()) });
       const parsed = schema.safeParse(req.body);
@@ -1342,7 +1331,7 @@ export async function registerRoutes(
     res.json(filtered);
   });
 
-  app.post(api.orders.bulkCreate.path, async (req, res) => {
+  app.post(api.orders.bulkCreate.path, requireAdmin, async (req, res) => {
     try {
       const input = api.orders.bulkCreate.input.parse(req.body);
       const result = await storage.bulkCreateOrders(input);
@@ -1360,8 +1349,8 @@ export async function registerRoutes(
   });
 
   // Update a single order
-  app.put("/api/orders/:id", async (req, res) => {
-    const id = parseInt(req.params.id, 10);
+  app.put("/api/orders/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid order id" });
     try {
       const updated = await storage.updateOrder(id, req.body);
@@ -1372,8 +1361,8 @@ export async function registerRoutes(
   });
 
   // Delete a single order
-  app.delete("/api/orders/:id", async (req, res) => {
-    const id = parseInt(req.params.id, 10);
+  app.delete("/api/orders/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid order id" });
     try {
       await storage.deleteOrder(id);
@@ -1389,7 +1378,7 @@ export async function registerRoutes(
     res.json(stock);
   });
 
-  app.post(api.stock.bulkUpdate.path, async (req, res) => {
+  app.post(api.stock.bulkUpdate.path, requireAdmin, async (req, res) => {
     try {
       const input = api.stock.bulkUpdate.input.parse(req.body);
       const result = await storage.bulkUpdateStockDetails(input);
@@ -1526,7 +1515,7 @@ export async function registerRoutes(
   });
 
   // ONE-TIME data export: generates a SQL file to migrate data to another database
-  app.get("/api/admin/export-data", async (_req, res) => {
+  app.get("/api/admin/export-data", requireAdmin, async (_req, res) => {
     try {
       const tables = [
         { name: "shop_details", conflict: "(id)" },
@@ -1846,9 +1835,7 @@ export async function registerRoutes(
     res.json(categories);
   });
 
-  app.post("/api/expense-categories", async (req, res) => {
-    const isAdmin = (req.user as any)?.role === "admin";
-    if (!isAdmin) return res.status(403).json({ message: "Admin only" });
+  app.post("/api/expense-categories", requireAdmin, async (req, res) => {
     const { name, type } = req.body;
     if (!name || !type) return res.status(400).json({ message: "name and type are required" });
     if (!["expense", "income"].includes(type)) return res.status(400).json({ message: "type must be expense or income" });
@@ -1862,10 +1849,8 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/expense-categories/:id", async (req, res) => {
-    const isAdmin = (req.user as any)?.role === "admin";
-    if (!isAdmin) return res.status(403).json({ message: "Admin only" });
-    const id = parseInt(req.params.id, 10);
+  app.delete("/api/expense-categories/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
     const deleted = await storage.deleteExpenseCategory(id);
     if (!deleted) return res.status(404).json({ message: "Not found" });
@@ -1896,10 +1881,8 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/daily-expenses/:id", async (req, res) => {
-    const isAdmin = (req.user as any)?.role === "admin";
-    if (!isAdmin) return res.status(403).json({ message: "Admin only" });
-    const id = parseInt(req.params.id, 10);
+  app.put("/api/daily-expenses/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
     const { type, category, amount, description, paymentMode } = req.body;
     const updates: Record<string, any> = {};
@@ -1916,10 +1899,8 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/daily-expenses/:id", async (req, res) => {
-    const isAdmin = (req.user as any)?.role === "admin";
-    if (!isAdmin) return res.status(403).json({ message: "Admin only" });
-    const id = parseInt(req.params.id, 10);
+  app.delete("/api/daily-expenses/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
     const deleted = await storage.deleteDailyExpense(id);
     if (!deleted) return res.status(404).json({ message: "Not found" });

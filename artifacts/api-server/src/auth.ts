@@ -1,6 +1,6 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express, Request, Response, NextFunction } from "express";
+import { Express, RequestHandler } from "express";
 import session from "express-session";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
@@ -18,12 +18,32 @@ declare global {
  * downstream handler when the request is not authenticated.
  * Apply this to any /api route that should only serve logged-in users.
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export const requireAuth: RequestHandler = (req, res, next) => {
   if (req.isAuthenticated()) {
     return next();
   }
   return res.status(401).json({ message: "Unauthorized" });
-}
+};
+
+/**
+ * Middleware that requires the authenticated user to have role === "admin".
+ * Returns 401 if not authenticated, 403 if authenticated but not an admin.
+ * Apply this to any /api route that performs destructive or admin-only writes
+ * (deletes, bulk uploads, archive imports, admin exports, etc.).
+ *
+ * Should be chained AFTER `requireAuth` (or after the global `requireAuth`
+ * mount on the `/api` router) so the 401 case is already handled, but it is
+ * also safe to use stand-alone — it returns 401 when there is no user.
+ */
+export const requireAdmin: RequestHandler = (req, res, next) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  if ((req.user as SelectUser).role !== "admin") {
+    return res.status(403).json({ message: "Admin only" });
+  }
+  return next();
+};
 
 export function setupAuth(app: Express) {
   const sessionSettings: session.SessionOptions = {
