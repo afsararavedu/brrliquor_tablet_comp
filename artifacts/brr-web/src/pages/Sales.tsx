@@ -31,6 +31,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { format, parse, subDays } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -68,9 +69,12 @@ function formatDateLocal(date: Date): string {
 export default function Sales() {
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocal());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [exportDate, setExportDate] = useState<string>(getTodayLocal());
-  const [exportDatePickerOpen, setExportDatePickerOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportFromDate, setExportFromDate] = useState<string>(getTodayLocal());
+  const [exportToDate, setExportToDate] = useState<string>(getTodayLocal());
+  const [exportFromPickerOpen, setExportFromPickerOpen] = useState(false);
+  const [exportToPickerOpen, setExportToPickerOpen] = useState(false);
 
   const { data: sales, isLoading } = useSales(selectedDate);
   const { mutate: updateSales, isPending: isSaving } = useBulkUpdateSales();
@@ -222,24 +226,28 @@ export default function Sales() {
   // Rows pending deletion — applied when Save Sales is clicked (not immediately)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set());
 
-  const generateCSV = useCallback((data: DailySale[], date: string) => {
-    const headers = [
-      "SNo", "Brand No", "Brand Name", "Size", "Qty/Case", 
-      "Opening Bal (Btls)", "New Stock (Cs)", "New Stock (Btls)", 
-      "Total Stock", "Closing Bal (Cs)", "Closing Bal (Btls)", 
-      "Sold Bottles", "MRP", "Sale Value", "Breakage", 
-      "Total Closing Stock", "Final Closing Bal"
-    ];
+  // Quote a CSV cell. Always wraps strings in double quotes and escapes
+  // embedded double quotes per RFC 4180 (`"` -> `""`). Numbers/null/undefined
+  // are rendered as bare values (empty string for null/undefined).
+  const csvCell = useCallback((value: unknown): string => {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+    const s = String(value);
+    return `"${s.replace(/"/g, '""')}"`;
+  }, []);
 
-    const csvContent = [
-      headers.join(","),
-      ...data.map((item, idx) => {
+  // Build CSV content for a single date's rows. When `includeDateColumn` is
+  // true, prepends a "Date" column so multi-day exports stay distinguishable.
+  const buildCsvRowsForDate = useCallback(
+    (data: DailySale[], date: string, startSno: number, includeDateColumn: boolean) => {
+      return data.map((item, idx) => {
         const totalStock = (item.openingBalanceBottles || 0) + ((item.quantityPerCase || 0) * (item.newStockCases || 0)) + (item.newStockBottles || 0);
-        return [
-          idx + 1,
-          `"${item.brandNumber}"`,
-          `"${item.brandName}"`,
-          `"${item.size}"`,
+        const cells: unknown[] = [
+          startSno + idx,
+          ...(includeDateColumn ? [date] : []),
+          item.brandNumber,
+          item.brandName,
+          item.size,
           item.quantityPerCase,
           item.openingBalanceBottles,
           item.newStockCases,
@@ -252,16 +260,20 @@ export default function Sales() {
           item.saleValue,
           item.breakageBottles,
           item.totalClosingStock,
-          item.finalClosingBalance
-        ].join(",");
-      })
-    ].join("\n");
+          item.finalClosingBalance,
+        ];
+        return cells.map(csvCell).join(",");
+      });
+    },
+    [csvCell],
+  );
 
+  const downloadCsv = useCallback((csvContent: string, filename: string) => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `sales_report_${date}.csv`);
+    link.setAttribute("download", filename);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -269,54 +281,117 @@ export default function Sales() {
     URL.revokeObjectURL(url);
   }, []);
 
+  // Inclusive list of YYYY-MM-DD strings between two dates (chronological).
+  const enumerateDateRange = useCallback((fromYmd: string, toYmd: string): string[] => {
+    const start = parse(fromYmd, "yyyy-MM-dd", new Date());
+    const end = parse(toYmd, "yyyy-MM-dd", new Date());
+    const out: string[] = [];
+    const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    while (cur <= end) {
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth() + 1).padStart(2, "0");
+      const d = String(cur.getDate()).padStart(2, "0");
+      out.push(`${y}-${m}-${d}`);
+      cur.setDate(cur.getDate() + 1);
+    }
+    return out;
+  }, []);
+
   const handleExportCSV = useCallback(async () => {
-    try {
-      if (exportDate === selectedDate) {
-        if (!localSales || localSales.length === 0) {
-          toast({
-            title: "No Data",
-            description: `No sales data found for ${exportDate}.`,
-            variant: "destructive",
-          });
-          return;
-        }
-        generateCSV(localSales, exportDate);
-      } else {
-        setIsExporting(true);
-        const res = await fetch(`/api/sales?date=${encodeURIComponent(exportDate)}`);
-        setIsExporting(false);
-        if (!res.ok) {
-          toast({
-            title: "Export Failed",
-            description: `Failed to fetch sales data for ${exportDate}.`,
-            variant: "destructive",
-          });
-          return;
-        }
-        const data: DailySale[] = await res.json();
-        if (!data || data.length === 0) {
-          toast({
-            title: "No Data",
-            description: `No sales data found for ${exportDate}.`,
-            variant: "destructive",
-          });
-          return;
-        }
-        generateCSV(data, exportDate);
-      }
+    if (exportFromDate > exportToDate) {
       toast({
-        title: "Export Successful",
-        description: `Sales data for ${exportDate} has been exported to CSV.`,
-      });
-    } catch (error) {
-      setIsExporting(false);
-      toast({
-        title: "Export Failed",
-        description: "There was an error exporting the data.",
+        title: "Invalid Date Range",
+        description: "The 'From' date must be on or before the 'To' date.",
         variant: "destructive",
       });
+      return;
     }
-  }, [localSales, toast, selectedDate, exportDate, generateCSV]);
+
+    const dates = enumerateDateRange(exportFromDate, exportToDate);
+    const isRange = dates.length > 1;
+
+    setIsExporting(true);
+    try {
+      // Fetch all dates. For the date that matches the currently loaded
+      // sales, reuse localSales (avoids one network call and keeps any
+      // in-progress edits in the export).
+      const perDateRows: Array<{ date: string; rows: DailySale[] }> = [];
+      for (const d of dates) {
+        if (d === selectedDate && localSales) {
+          perDateRows.push({ date: d, rows: localSales });
+          continue;
+        }
+        const res = await fetch(`/api/sales?date=${encodeURIComponent(d)}`);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch ${d} (${res.status})`);
+        }
+        const rows: DailySale[] = await res.json();
+        perDateRows.push({ date: d, rows: rows || [] });
+      }
+
+      const totalCount = perDateRows.reduce((sum, p) => sum + p.rows.length, 0);
+      if (totalCount === 0) {
+        toast({
+          title: "No Data",
+          description: isRange
+            ? `No sales data found between ${exportFromDate} and ${exportToDate}.`
+            : `No sales data found for ${exportFromDate}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const headers = [
+        "SNo",
+        ...(isRange ? ["Date"] : []),
+        "Brand No", "Brand Name", "Size", "Qty/Case",
+        "Opening Bal (Btls)", "New Stock (Cs)", "New Stock (Btls)",
+        "Total Stock", "Closing Bal (Cs)", "Closing Bal (Btls)",
+        "Sold Bottles", "MRP", "Sale Value", "Breakage",
+        "Total Closing Stock", "Final Closing Bal",
+      ];
+
+      const lines: string[] = [headers.map(csvCell).join(",")];
+      let sno = 1;
+      for (const { date, rows } of perDateRows) {
+        if (rows.length === 0) continue;
+        const dateRows = buildCsvRowsForDate(rows, date, sno, isRange);
+        lines.push(...dateRows);
+        sno += rows.length;
+      }
+
+      const filename = isRange
+        ? `sales_report_${exportFromDate}_to_${exportToDate}.csv`
+        : `sales_report_${exportFromDate}.csv`;
+      downloadCsv(lines.join("\n"), filename);
+
+      toast({
+        title: "Export Successful",
+        description: isRange
+          ? `Sales data from ${exportFromDate} to ${exportToDate} (${totalCount} rows) exported.`
+          : `Sales data for ${exportFromDate} (${totalCount} rows) exported.`,
+      });
+      setExportDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "There was an error exporting the data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [
+    exportFromDate,
+    exportToDate,
+    enumerateDateRange,
+    selectedDate,
+    localSales,
+    toast,
+    buildCsvRowsForDate,
+    downloadCsv,
+    csvCell,
+  ]);
 
   // Download Excel template pre-populated with current sales data
   const handleDownloadTemplate = useCallback(() => {
@@ -1048,55 +1123,24 @@ export default function Sales() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
-            <div className="flex items-center gap-2">
-              <Popover open={exportDatePickerOpen} onOpenChange={setExportDatePickerOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    data-testid="input-export-date-picker"
-                    className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2 shadow-sm cursor-pointer hover:bg-accent transition-colors"
-                  >
-                    <CalendarIcon className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm font-semibold text-foreground">
-                      {format(parse(exportDate, "yyyy-MM-dd", new Date()), "MM/dd/yyyy")}
-                    </span>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar
-                    mode="single"
-                    selected={parse(exportDate, "yyyy-MM-dd", new Date())}
-                    onSelect={(date) => {
-                      if (date) {
-                        const y = date.getFullYear();
-                        const m = String(date.getMonth() + 1).padStart(2, "0");
-                        const d = String(date.getDate()).padStart(2, "0");
-                        setExportDate(`${y}-${m}-${d}`);
-                        setExportDatePickerOpen(false);
-                      }
-                    }}
-                    disabled={(date) => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      return date > today;
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <button
-                onClick={handleExportCSV}
-                disabled={isExporting}
-                data-testid="button-export-csv"
-                className="flex items-center gap-2 px-6 py-2 bg-secondary text-secondary-foreground rounded-xl font-medium border border-border hover:bg-secondary/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isExporting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
-                Export CSV
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                // Default the range to the currently viewed date.
+                setExportFromDate(selectedDate);
+                setExportToDate(selectedDate);
+                setExportDialogOpen(true);
+              }}
+              disabled={isExporting}
+              data-testid="button-export-csv"
+              className="flex items-center gap-2 px-6 py-2 bg-secondary text-secondary-foreground rounded-xl font-medium border border-border hover:bg-secondary/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              Export CSV
+            </button>
 
             {isSubmitted && !isAdmin ? (
               <div className="flex items-center gap-2 px-6 py-2 bg-emerald-100 text-emerald-700 rounded-xl font-medium border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-400" data-testid="status-locked-buttons">
@@ -1335,6 +1379,141 @@ export default function Sales() {
           )}
         </div>
       </div>
+
+      <Dialog open={exportDialogOpen} onOpenChange={(open) => {
+        if (!isExporting) setExportDialogOpen(open);
+      }}>
+        <DialogContent className="sm:max-w-[480px]" data-testid="dialog-export-range">
+          <DialogHeader>
+            <DialogTitle>Export Sales to CSV</DialogTitle>
+            <DialogDescription>
+              Pick a single day or a date range. Same start and end date exports just that day.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">From</label>
+                <Popover open={exportFromPickerOpen} onOpenChange={(o) => { if (!isExporting) setExportFromPickerOpen(o); }}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isExporting}
+                      data-testid="input-export-from-date"
+                      className="w-full flex items-center gap-2 bg-background border border-input rounded-xl px-3 py-2 shadow-sm cursor-pointer hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-semibold text-foreground">
+                        {format(parse(exportFromDate, "yyyy-MM-dd", new Date()), "MM/dd/yyyy")}
+                      </span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={parse(exportFromDate, "yyyy-MM-dd", new Date())}
+                      onSelect={(date) => {
+                        if (date) {
+                          const y = date.getFullYear();
+                          const m = String(date.getMonth() + 1).padStart(2, "0");
+                          const d = String(date.getDate()).padStart(2, "0");
+                          const newFrom = `${y}-${m}-${d}`;
+                          setExportFromDate(newFrom);
+                          // Keep range valid: bump To forward if From moved past it.
+                          if (newFrom > exportToDate) setExportToDate(newFrom);
+                          setExportFromPickerOpen(false);
+                        }
+                      }}
+                      disabled={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return date > today;
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">To</label>
+                <Popover open={exportToPickerOpen} onOpenChange={(o) => { if (!isExporting) setExportToPickerOpen(o); }}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isExporting}
+                      data-testid="input-export-to-date"
+                      className="w-full flex items-center gap-2 bg-background border border-input rounded-xl px-3 py-2 shadow-sm cursor-pointer hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-semibold text-foreground">
+                        {format(parse(exportToDate, "yyyy-MM-dd", new Date()), "MM/dd/yyyy")}
+                      </span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={parse(exportToDate, "yyyy-MM-dd", new Date())}
+                      onSelect={(date) => {
+                        if (date) {
+                          const y = date.getFullYear();
+                          const m = String(date.getMonth() + 1).padStart(2, "0");
+                          const d = String(date.getDate()).padStart(2, "0");
+                          setExportToDate(`${y}-${m}-${d}`);
+                          setExportToPickerOpen(false);
+                        }
+                      }}
+                      disabled={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const fromDate = parse(exportFromDate, "yyyy-MM-dd", new Date());
+                        fromDate.setHours(0, 0, 0, 0);
+                        return date > today || date < fromDate;
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            {exportFromDate !== exportToDate && (
+              <div className="text-xs text-muted-foreground bg-secondary/40 border border-border rounded-lg px-3 py-2" data-testid="text-export-range-info">
+                Exporting {enumerateDateRange(exportFromDate, exportToDate).length} day(s). The CSV will include a "Date" column.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <button
+              type="button"
+              onClick={() => setExportDialogOpen(false)}
+              disabled={isExporting}
+              data-testid="button-export-cancel"
+              className="px-4 py-2 rounded-xl border border-border bg-background hover:bg-accent text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              disabled={isExporting || exportFromDate > exportToDate}
+              data-testid="button-export-confirm"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              Export
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
