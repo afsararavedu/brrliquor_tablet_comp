@@ -44,7 +44,7 @@ function Router() {
           <Header onMenuClick={() => setDrawerOpen(true)} />
         )}
         <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-x-auto">
-          <div className="max-w-[1600px] mx-auto">
+          <div className="w-full">
             <Switch>
               <Route path="/auth" component={AuthPage} />
               <Route path="/reset-password" component={ResetPassword} />

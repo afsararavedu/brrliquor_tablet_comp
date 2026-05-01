@@ -1150,17 +1150,17 @@ export default function Sales() {
 
         {/* Table */}
         <div className="overflow-auto max-h-[calc(100dvh-220px)] table-typography rounded-b-lg border border-border">
-          <table className="w-full">
-            <thead className="sticky top-0 z-10 bg-secondary shadow-sm">
+          <table className="w-full min-w-[1400px] border-separate border-spacing-0">
+            <thead className="sticky top-0 z-20 bg-secondary shadow-sm">
               <tr className="bg-secondary border-b-2 border-border">
-                <th className="table-header w-8 border-r border-border">SNo</th>
-                <th className="table-header w-14 border-r border-border">
+                <th className="table-header w-[44px] min-w-[44px] max-w-[44px] border-r border-border sticky left-0 top-0 z-30 bg-secondary">SNo</th>
+                <th className="table-header w-[80px] min-w-[80px] max-w-[80px] border-r border-border sticky left-[44px] top-0 z-30 bg-secondary">
                   <button onClick={() => handleSalesSortToggle('brandNumber')} className="flex items-center gap-1 hover:text-foreground w-full">
                     Brand No {salesSortField === 'brandNumber' ? (salesSortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
                   </button>
                 </th>
-                <th className="table-header w-24 border-r border-border">Brand Name</th>
-                <th className="table-header w-12 border-r border-border">Size</th>
+                <th className="table-header w-[200px] min-w-[200px] max-w-[200px] border-r border-border sticky left-[124px] top-0 z-30 bg-secondary shadow-[2px_0_0_0_rgba(0,0,0,0.04)]">Brand Name</th>
+                <th className="table-header w-[70px] min-w-[70px] max-w-[70px] border-r border-border sticky left-[324px] top-0 z-30 bg-secondary shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]">Size</th>
                 <th className="table-header w-10 border-r border-border">Qty/Cs</th>
                 <th className="table-header w-14 border-r border-border">Op. Bal (Btls)</th>
                 <th className="table-header w-16 text-right bg-green-50/50 border-r border-border">New Stk (Cs)</th>
@@ -1207,19 +1207,20 @@ export default function Sales() {
                   const qtyPerCase = item.quantityPerCase || 0;
                   const editMrp = Number(item.mrp || 0);
                   const totalStock = opBal + (qtyPerCase * newCs) + newBtls;
+                  const rowBg = idx % 2 === 1 ? "bg-[#fafafa]" : "bg-white";
                   return (
                     <tr
                       key={item.id}
-                      className={`transition-colors group ${idx % 2 === 1 ? "bg-muted/10" : "bg-white"} hover:bg-primary/5 ${isSubmitted ? "opacity-90" : ""}`}
+                      className={`transition-colors group ${rowBg} hover:bg-primary/5 ${isSubmitted ? "opacity-90" : ""}`}
                     >
-                      <td className="table-cell font-mono text-xs text-muted-foreground border-r border-border">
+                      <td className={`table-cell font-mono text-xs text-muted-foreground border-r border-border sticky left-0 z-10 ${rowBg} group-hover:bg-[#fff5f4]`}>
                         {globalIdx + 1}
                       </td>
-                      <td className="table-cell font-mono text-xs text-muted-foreground border-r border-border">
+                      <td className={`table-cell font-mono text-xs text-muted-foreground border-r border-border sticky left-[44px] z-10 ${rowBg} group-hover:bg-[#fff5f4]`}>
                         {item.brandNumber}
                       </td>
-                      <td className="table-cell font-medium border-r border-border">{item.brandName}</td>
-                      <td className="table-cell text-muted-foreground border-r border-border">
+                      <td className={`table-cell font-medium border-r border-border sticky left-[124px] z-10 ${rowBg} group-hover:bg-[#fff5f4] truncate`} title={item.brandName}>{item.brandName}</td>
+                      <td className={`table-cell text-muted-foreground border-r border-border sticky left-[324px] z-10 ${rowBg} group-hover:bg-[#fff5f4] shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]`}>
                         {item.size}
                       </td>
                       <td className="table-cell text-muted-foreground border-r border-border">
