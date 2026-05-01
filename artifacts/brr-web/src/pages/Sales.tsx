@@ -766,11 +766,6 @@ export default function Sales() {
     updateSales({ data: serverData, date: selectedDate, deleteIds: deleteIdsArray }, {
       onSuccess: () => {
         setPendingDeleteIds(new Set());
-        toast({
-          title: "Sales Saved",
-          description: `Sales data for ${selectedDate} has been successfully saved${deleteIdsArray.length > 0 ? ` (${deleteIdsArray.length} row${deleteIdsArray.length > 1 ? "s" : ""} deleted)` : ""}.`,
-          className: "bg-green-50 border-green-200 text-green-800",
-        });
       },
       onError: (err) => {
         toast({
@@ -795,13 +790,6 @@ export default function Sales() {
 
     submitSales(selectedDate, {
       onSuccess: () => {
-        toast({
-          title: isSubmitted ? "Sales Re-Submitted" : "Sales Submitted",
-          description: isSubmitted
-            ? `Sales for ${selectedDate} have been re-submitted successfully.`
-            : `Sales for ${selectedDate} have been finalized and locked.`,
-          className: "bg-green-50 border-green-200 text-green-800",
-        });
       },
       onError: (err) => {
         toast({
@@ -1420,20 +1408,14 @@ export default function Sales() {
           totalItems={filteredSales.length}
         />
 
-        <div className="p-4 border-t border-border bg-secondary/20 flex justify-end gap-3">
-          {isSubmitted && (
-            <div className="flex items-center gap-2 px-8 py-3 bg-emerald-100 text-emerald-700 rounded-xl font-bold border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700 dark:text-emerald-400" data-testid="status-locked-footer">
-              <CheckCircle className="w-5 h-5" />
-              Sales Submitted & Locked
-            </div>
-          )}
-          {!isSubmitted && !isDateAllowedForAction && (
+        {!isSubmitted && !isDateAllowedForAction && (
+          <div className="p-4 border-t border-border bg-secondary/20 flex justify-end gap-3">
             <div className="flex items-center gap-2 px-8 py-3 bg-amber-50 text-amber-700 rounded-xl font-bold border border-amber-200 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-400" data-testid="status-date-restricted-footer">
               <Lock className="w-5 h-5" />
               Date outside allowed range
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <Dialog open={exportDialogOpen} onOpenChange={(open) => {
