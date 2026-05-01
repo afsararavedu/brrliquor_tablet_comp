@@ -1,6 +1,7 @@
 import brrLogo from "@assets/brr_solution_logo_1776622112650.jpeg";
 import bgImage from "@assets/Liquor-store-inventory-homepage_1_1777047159851.png";
 import { useAuth } from "@/hooks/use-auth";
+import { ApiError } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,6 +12,19 @@ import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
+function formatRemaining(totalSec: number): string {
+  if (totalSec <= 0) return "0 seconds";
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  if (minutes <= 0) {
+    return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  }
+  if (seconds === 0) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  return `${minutes} min ${seconds} sec`;
+}
+
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
@@ -20,6 +34,14 @@ export default function AuthPage() {
   const { user, loginMutation } = useAuth();
   const [, setLocation] = useLocation();
   const [showForgot, setShowForgot] = useState(false);
+  // Wall-clock time (ms) at which the lockout expires, or null if not locked.
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  // Re-render every second while the countdown is active.
+  const [now, setNow] = useState<number>(() => Date.now());
+  // Generic non-lockout error message (e.g. "Invalid username or password")
+  // to render inline above the button. The destructive toast still fires
+  // for these via use-auth, but this gives an additional clear inline cue.
+  const [inlineError, setInlineError] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -40,10 +62,56 @@ export default function AuthPage() {
     }
   }, [user]);
 
+  // Drive the countdown timer once a lockout is active. The interval is
+  // only registered while we know we're locked, and it auto-clears when
+  // the deadline passes so the submit button re-enables itself.
+  useEffect(() => {
+    if (lockoutUntil === null) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= lockoutUntil) {
+        setLockoutUntil(null);
+        window.clearInterval(id);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [lockoutUntil]);
+
   if (user) return null;
 
+  const remainingSec =
+    lockoutUntil !== null
+      ? Math.max(0, Math.ceil((lockoutUntil - now) / 1000))
+      : 0;
+  const isLocked = remainingSec > 0;
+
   const onSubmit = (data: z.infer<typeof loginSchema>) => {
-    loginMutation.mutate(data);
+    if (isLocked) return;
+    setInlineError(null);
+    loginMutation.mutate(data, {
+      onError: (error) => {
+        if (error instanceof ApiError && error.status === 429) {
+          // Server tells us how many seconds to wait. Prefer the
+          // structured `retryAfterSec` field (sent in the JSON body),
+          // and fall back to a sensible default if it's missing.
+          const body = (error.body ?? {}) as { retryAfterSec?: unknown };
+          const sec =
+            typeof body.retryAfterSec === "number" && body.retryAfterSec > 0
+              ? Math.ceil(body.retryAfterSec)
+              : 60;
+          setLockoutUntil(Date.now() + sec * 1000);
+          setInlineError(null);
+        } else {
+          setInlineError(
+            error instanceof ApiError && error.status === 401
+              ? "Invalid username or password."
+              : error.message,
+          );
+        }
+      },
+    });
   };
 
   return (
@@ -116,14 +184,45 @@ export default function AuthPage() {
                     </FormItem>
                   )}
                 />
+                {isLocked && (
+                  <div
+                    role="alert"
+                    data-testid="login-lockout"
+                    className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                  >
+                    <div className="font-semibold">
+                      Too many failed attempts
+                    </div>
+                    <div>
+                      For security, login is paused. Try again in{" "}
+                      <span data-testid="login-lockout-remaining">
+                        {formatRemaining(remainingSec)}
+                      </span>
+                      .
+                    </div>
+                  </div>
+                )}
+                {!isLocked && inlineError && (
+                  <div
+                    role="alert"
+                    data-testid="login-error"
+                    className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                  >
+                    {inlineError}
+                  </div>
+                )}
                 <button
                   type="submit"
-                  disabled={loginMutation.isPending}
+                  disabled={loginMutation.isPending || isLocked}
                   data-testid="button-login"
-                  className="w-full h-11 rounded-md text-white font-semibold text-base transition-opacity disabled:opacity-70 mt-1"
+                  className="w-full h-11 rounded-md text-white font-semibold text-base transition-opacity disabled:opacity-70 disabled:cursor-not-allowed mt-1"
                   style={{ backgroundColor: "#e03a2f" }}
                 >
-                  {loginMutation.isPending ? "Logging in..." : "Login"}
+                  {isLocked
+                    ? `Locked — wait ${formatRemaining(remainingSec)}`
+                    : loginMutation.isPending
+                      ? "Logging in..."
+                      : "Login"}
                 </button>
               </form>
             </Form>

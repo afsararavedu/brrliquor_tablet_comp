@@ -61,6 +61,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       setUser(u);
     } catch (e) {
+      // 429 lockouts are surfaced by the login screen itself with a
+      // dedicated banner and a live countdown — we deliberately don't
+      // mirror them into the generic `error` state, otherwise the
+      // stale lockout message would briefly flash back into view after
+      // the countdown ends and before the user types anything new.
+      if (e instanceof ApiError && e.status === 429) {
+        throw e;
+      }
       const msg =
         e instanceof Error ? e.message : "Login failed. Please try again.";
       setError(msg);

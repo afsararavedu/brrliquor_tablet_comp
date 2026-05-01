@@ -5,7 +5,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { User, InsertUser } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ApiError, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type AuthContextType = {
@@ -44,6 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(["/api/user"], user);
     },
     onError: (error: Error) => {
+      // 429 lockout is rendered inline on the login page with a live
+      // countdown — don't also pop a destructive toast for it.
+      if (error instanceof ApiError && error.status === 429) {
+        return;
+      }
       toast({
         title: "Login failed",
         description: error.message,

@@ -86,9 +86,11 @@ export interface ApiOptions {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  data: unknown;
+  constructor(status: number, message: string, data: unknown = null) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -128,20 +130,23 @@ export async function api<T = unknown>(
 
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
+    let data: unknown = null;
     try {
       const text = await res.text();
       if (text) {
         try {
           const parsed = JSON.parse(text);
+          data = parsed;
           message = parsed.message || parsed.error || text;
         } catch {
+          data = text;
           message = text;
         }
       }
     } catch {
       // ignore
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, data);
   }
 
   if (res.status === 204) return undefined as unknown as T;

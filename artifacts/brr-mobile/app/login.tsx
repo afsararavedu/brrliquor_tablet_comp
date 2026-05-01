@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { Image, ImageBackground } from "expo-image";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,6 +15,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { ApiError } from "@/lib/api";
+
+function formatRemaining(totalSec: number): string {
+  if (totalSec <= 0) return "0 seconds";
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  if (minutes <= 0) {
+    return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  }
+  if (seconds === 0) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  return `${minutes} min ${seconds} sec`;
+}
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -22,16 +36,49 @@ export default function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Wall-clock time (ms) at which the lockout expires, or null if not locked.
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  // Countdown interval — only active while we're locked out so the
+  // submit button re-enables itself the moment the lockout window passes.
+  useEffect(() => {
+    if (lockoutUntil === null) return;
+    setNow(Date.now());
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= lockoutUntil) {
+        setLockoutUntil(null);
+        clearInterval(id);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lockoutUntil]);
+
+  const remainingSec =
+    lockoutUntil !== null
+      ? Math.max(0, Math.ceil((lockoutUntil - now) / 1000))
+      : 0;
+  const isLocked = remainingSec > 0;
 
   const onSubmit = async () => {
-    if (!username || !password || submitting) return;
+    if (!username || !password || submitting || isLocked) return;
     setSubmitting(true);
     if (Platform.OS !== "web") {
       Haptics.selectionAsync().catch(() => {});
     }
     try {
       await login(username.trim(), password);
-    } catch {
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) {
+        const data = (e.data ?? {}) as { retryAfterSec?: unknown };
+        const sec =
+          typeof data.retryAfterSec === "number" && data.retryAfterSec > 0
+            ? Math.ceil(data.retryAfterSec)
+            : 60;
+        setLockoutUntil(Date.now() + sec * 1000);
+      }
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
           () => {},
@@ -113,7 +160,23 @@ export default function LoginScreen() {
                 />
               </View>
 
-              {error ? (
+              {isLocked ? (
+                <View style={styles.lockoutBox} testID="login-lockout">
+                  <Text style={styles.lockoutTitle}>
+                    Too many failed attempts
+                  </Text>
+                  <Text style={styles.lockoutBody}>
+                    For security, login is paused. Try again in{" "}
+                    <Text
+                      style={styles.lockoutBodyStrong}
+                      testID="login-lockout-remaining"
+                    >
+                      {formatRemaining(remainingSec)}
+                    </Text>
+                    .
+                  </Text>
+                </View>
+              ) : error ? (
                 <Text style={[styles.error, { color: colors.destructive }]}>
                   {error}
                 </Text>
@@ -121,13 +184,13 @@ export default function LoginScreen() {
 
               <Pressable
                 onPress={onSubmit}
-                disabled={submitting || !username || !password}
+                disabled={submitting || !username || !password || isLocked}
                 style={({ pressed }) => [
                   styles.button,
                   {
                     backgroundColor: colors.primary,
                     opacity:
-                      submitting || !username || !password
+                      submitting || !username || !password || isLocked
                         ? 0.6
                         : pressed
                           ? 0.85
@@ -145,7 +208,9 @@ export default function LoginScreen() {
                       { color: colors.primaryForeground },
                     ]}
                   >
-                    Login
+                    {isLocked
+                      ? `Locked — wait ${formatRemaining(remainingSec)}`
+                      : "Login"}
                   </Text>
                 )}
               </Pressable>
@@ -236,6 +301,30 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 13,
     textAlign: "center",
+  },
+  lockoutBox: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fef2f2",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  lockoutTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: "#991b1b",
+    marginBottom: 2,
+  },
+  lockoutBody: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#991b1b",
+  },
+  lockoutBodyStrong: {
+    fontFamily: "Inter_600SemiBold",
+    color: "#991b1b",
   },
   button: {
     marginTop: 18,
