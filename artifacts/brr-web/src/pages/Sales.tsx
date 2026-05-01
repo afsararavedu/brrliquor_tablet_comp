@@ -1008,58 +1008,69 @@ export default function Sales() {
         </div>
       </div>
 
-      {/* Value Cards Row */}
+      {/* Combined summary cards — value + bottles in one row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm" data-testid="card-opening-balance-value">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Opening Balance Value</p>
-          <p className="text-lg font-bold text-foreground">{formatCurrency(summary?.openingBalanceValue || 0)}</p>
-        </div>
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm" data-testid="card-new-stock-value">
-          <p className="text-xs font-medium text-muted-foreground mb-1">New Stock Value</p>
-          <p className="text-lg font-bold text-foreground">{formatCurrency(summary?.newStockValue || 0)}</p>
-        </div>
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm" data-testid="card-sold-stock-value">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Sold Stock Value</p>
-          <div className="flex items-center gap-3">
-            <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded dark:bg-blue-900/30 dark:text-blue-300">IML</span>
-            <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded dark:bg-amber-900/30 dark:text-amber-300">Beer</span>
+        {/* Opening */}
+        <div className="bg-card rounded-xl border border-border shadow-sm flex overflow-hidden" data-testid="card-opening-balance-value">
+          <div className="flex-1 p-3 min-w-0">
+            <p className="text-xs font-medium text-muted-foreground mb-1 truncate">Opening Balance Value</p>
+            <p className="text-lg font-bold text-foreground">{formatCurrency(summary?.openingBalanceValue || 0)}</p>
           </div>
-          <p className="text-lg font-bold text-foreground mt-1">{formatCurrency(summary?.soldStockValue || 0)}</p>
+          <div className="w-px bg-border self-stretch" />
+          <div className="flex-1 p-3 min-w-0" data-testid="card-opening-stock">
+            <p className="text-xs font-medium text-muted-foreground mb-1 truncate">opening Stock in bottles</p>
+            <div className="space-y-0.5 text-sm font-semibold text-foreground">
+              <p>IML - {imlCount("opening").toLocaleString()}</p>
+              <p>Beer - {beerCount("opening").toLocaleString()}</p>
+            </div>
+          </div>
         </div>
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm" data-testid="card-closing-balance-value">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Closing Balance Value</p>
-          <p className="text-lg font-bold text-foreground">{formatCurrency(summary?.closingBalanceValue || 0)}</p>
-        </div>
-      </div>
 
-      {/* Stock Count Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm" data-testid="card-opening-stock">
-          <p className="text-xs font-medium text-muted-foreground mb-2">opening Stock in bottles</p>
-          <div className="space-y-1 text-sm font-semibold text-foreground">
-            <p>IML - {imlCount("opening").toLocaleString()}</p>
-            <p>Beer - {beerCount("opening").toLocaleString()}</p>
+        {/* New Stock */}
+        <div className="bg-card rounded-xl border border-border shadow-sm flex overflow-hidden" data-testid="card-new-stock-value">
+          <div className="flex-1 p-3 min-w-0">
+            <p className="text-xs font-medium text-muted-foreground mb-1 truncate">New Stock Value</p>
+            <p className="text-lg font-bold text-foreground">{formatCurrency(summary?.newStockValue || 0)}</p>
+          </div>
+          <div className="w-px bg-border self-stretch" />
+          <div className="flex-1 p-3 min-w-0" data-testid="card-new-stock">
+            <p className="text-xs font-medium text-muted-foreground mb-1 truncate">New Stock in bottles</p>
+            <div className="space-y-0.5 text-sm font-semibold text-foreground">
+              <p>IML - {imlCount("newStock")}</p>
+              <p>Beer - {beerCount("newStock")}</p>
+            </div>
           </div>
         </div>
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm" data-testid="card-new-stock">
-          <p className="text-xs font-medium text-muted-foreground mb-2">New Stock in bottles</p>
-          <div className="space-y-1 text-sm font-semibold text-foreground">
-            <p>IML - {imlCount("newStock")}</p>
-            <p>Beer - {beerCount("newStock")}</p>
+
+        {/* Sold Stock */}
+        <div className="bg-card rounded-xl border border-border shadow-sm flex overflow-hidden" data-testid="card-sold-stock-value">
+          <div className="flex-1 p-3 min-w-0">
+            <p className="text-xs font-medium text-muted-foreground mb-1 truncate">Sold Stock Value</p>
+            <p className="text-lg font-bold text-foreground">{formatCurrency(summary?.soldStockValue || 0)}</p>
+          </div>
+          <div className="w-px bg-border self-stretch" />
+          <div className="flex-1 p-3 min-w-0" data-testid="card-sold-stock">
+            <p className="text-xs font-medium text-muted-foreground mb-1 truncate">Sold Stock in bottles</p>
+            <div className="space-y-0.5 text-sm font-semibold text-foreground">
+              <p>IML - {imlCount("sold").toLocaleString()}</p>
+              <p>Beer - {beerCount("sold").toLocaleString()}</p>
+            </div>
           </div>
         </div>
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm" data-testid="card-sold-stock">
-          <p className="text-xs font-medium text-muted-foreground mb-2">Sold Stock in bottles</p>
-          <div className="space-y-1 text-sm font-semibold text-foreground">
-            <p>IML - {imlCount("sold").toLocaleString()}</p>
-            <p>Beer - {beerCount("sold").toLocaleString()}</p>
+
+        {/* Closing */}
+        <div className="bg-card rounded-xl border border-border shadow-sm flex overflow-hidden" data-testid="card-closing-balance-value">
+          <div className="flex-1 p-3 min-w-0">
+            <p className="text-xs font-medium text-muted-foreground mb-1 truncate">Closing Balance Value</p>
+            <p className="text-lg font-bold text-foreground">{formatCurrency(summary?.closingBalanceValue || 0)}</p>
           </div>
-        </div>
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm" data-testid="card-closing-stock">
-          <p className="text-xs font-medium text-muted-foreground mb-2">Closing Stock in bottles</p>
-          <div className="space-y-1 text-sm font-semibold text-foreground">
-            <p>IML - {imlCount("closing")}</p>
-            <p>Beer - {beerCount("closing")}</p>
+          <div className="w-px bg-border self-stretch" />
+          <div className="flex-1 p-3 min-w-0" data-testid="card-closing-stock">
+            <p className="text-xs font-medium text-muted-foreground mb-1 truncate">Closing Stock in bottles</p>
+            <div className="space-y-0.5 text-sm font-semibold text-foreground">
+              <p>IML - {imlCount("closing")}</p>
+              <p>Beer - {beerCount("closing")}</p>
+            </div>
           </div>
         </div>
       </div>
