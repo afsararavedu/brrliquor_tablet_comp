@@ -1977,6 +1977,44 @@ async function seedDatabase() {
     );
   }
 
+  // ── Step 1b: emergency admin password reset ────────────────────────────
+  // If ADMIN_RESET_PASSWORD is set, find the first admin account and reset
+  // its password to that value (with mustResetPassword=true so the operator
+  // must choose a real password on first login). Unset the env var after use.
+  // This is the recovery path when the bootstrap password was lost.
+  const resetPassword = process.env.ADMIN_RESET_PASSWORD;
+  if (resetPassword) {
+    if (resetPassword.length < 8) {
+      logger.warn(
+        "ADMIN_RESET_PASSWORD is set but shorter than 8 characters; ignoring it.",
+      );
+    } else {
+      const adminToReset = await storage.getUserByUsername("admin");
+      if (adminToReset) {
+        const resetHashed = await bcrypt.hash(resetPassword, 10);
+        await storage.updateUser(adminToReset.id, {
+          password: resetHashed,
+          mustResetPassword: true,
+          passwordChangedAt: new Date(),
+        });
+        logger.warn(
+          "============================================================\n" +
+            "ADMIN_RESET_PASSWORD was set. The 'admin' account password has\n" +
+            "been reset. Log in with the value of ADMIN_RESET_PASSWORD and\n" +
+            "you will be forced to set a new password immediately.\n" +
+            "IMPORTANT: Remove the ADMIN_RESET_PASSWORD secret and redeploy\n" +
+            "after you have set a new password, so the recovery path is closed.\n" +
+            "============================================================",
+        );
+      } else {
+        logger.warn(
+          "ADMIN_RESET_PASSWORD is set but no 'admin' user was found. " +
+            "The reset was skipped. The admin may be bootstrapped on this startup.",
+        );
+      }
+    }
+  }
+
   // ── Step 2: bootstrap an initial admin if none exists ─────────────────
   // Look up by role rather than by username so renaming the seeded
   // account doesn't accidentally let a second bootstrap happen.
