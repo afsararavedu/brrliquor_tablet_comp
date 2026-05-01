@@ -9,8 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 const loginSchema = z.object({
@@ -22,8 +20,6 @@ export default function AuthPage() {
   const { user, loginMutation } = useAuth();
   const [, setLocation] = useLocation();
   const [showForgot, setShowForgot] = useState(false);
-  const { toast } = useToast();
-  const [forgotUsername, setForgotUsername] = useState("");
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -44,20 +40,6 @@ export default function AuthPage() {
 
   const onSubmit = (data: z.infer<typeof loginSchema>) => {
     loginMutation.mutate(data);
-  };
-
-  const handleForgot = async () => {
-    try {
-      const res = await apiRequest("POST", "/api/forgot-password", { username: forgotUsername });
-      const data = await res.json();
-      toast({
-        title: "Temp Password Generated",
-        description: `Your temporary password is: ${data.tempPassword}. Please use it to login and reset.`,
-      });
-      setShowForgot(false);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
   };
 
   return (
@@ -155,24 +137,33 @@ export default function AuthPage() {
         </div>
       </div>
 
-      {/* Forgot password modal */}
+      {/* Forgot password info modal — self-service reset has been removed
+          to prevent anyone from generating a temp password for an admin
+          account. An authenticated admin must now issue a temporary
+          password via the API and hand it off to the locked-out user. */}
       {showForgot && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <Card className="w-full max-w-sm shadow-2xl">
             <CardHeader>
               <CardTitle>Forgot Password</CardTitle>
-              <CardDescription>Enter admin username to get a temporary password</CardDescription>
+              <CardDescription>
+                For security, password resets are no longer self-service.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Input
-                placeholder="Admin Username"
-                value={forgotUsername}
-                onChange={(e) => setForgotUsername(e.target.value)}
-                autoComplete="username"
-              />
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowForgot(false)} className="flex-1">Cancel</Button>
-                <Button onClick={handleForgot} className="flex-1" style={{ backgroundColor: "#e03a2f" }}>Generate</Button>
+              <p className="text-sm text-muted-foreground">
+                Please contact your system administrator. They can issue you
+                a temporary password, which you can use to log in and then
+                set a new password.
+              </p>
+              <div className="flex">
+                <Button
+                  onClick={() => setShowForgot(false)}
+                  className="flex-1"
+                  style={{ backgroundColor: "#e03a2f" }}
+                >
+                  OK
+                </Button>
               </div>
             </CardContent>
           </Card>
