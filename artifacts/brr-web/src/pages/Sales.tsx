@@ -22,7 +22,14 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { type DailySale, type ShopDetail } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { PaginationCustom } from "@/components/ui/pagination-custom";
@@ -1078,46 +1085,6 @@ export default function Sales() {
       {/* Main Content Card */}
       <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col">
 
-        {/* Bulk Update Bar */}
-        <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bulk Sales Update via Excel</span>
-          <button
-            onClick={handleDownloadTemplate}
-            disabled={!localSales || localSales.length === 0}
-            data-testid="button-download-template"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-lg hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-green-600" />
-            Download Template
-          </button>
-          <button
-            onClick={() => { setUploadResult(null); excelFileInputRef.current?.click(); }}
-            disabled={!localSales || localSales.length === 0 || (isSubmitted && !isAdmin)}
-            data-testid="button-upload-excel"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-lg hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Upload className="w-3.5 h-3.5 text-blue-600" />
-            Upload Excel
-          </button>
-          <input
-            ref={excelFileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={handleUploadExcel}
-            data-testid="input-upload-excel"
-          />
-          {uploadResult && (
-            <span className="text-xs font-medium text-muted-foreground bg-card border border-border rounded-lg px-3 py-1.5 flex items-center gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-              <span className="text-green-700 font-semibold">{uploadResult.updated} updated</span>
-              {uploadResult.skipped > 0 && <span>· {uploadResult.skipped} skipped</span>}
-              {uploadResult.notFound > 0 && <span className="text-amber-600">· {uploadResult.notFound} not matched</span>}
-              <span className="text-muted-foreground/60">— review & click Save Sales</span>
-            </span>
-          )}
-        </div>
-
         {/* Toolbar */}
         <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-4 justify-between items-center bg-card">
           <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
@@ -1134,9 +1101,65 @@ export default function Sales() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
+            {/* Import split-button */}
+            <div className="flex items-stretch">
+              <button
+                onClick={() => { setUploadResult(null); excelFileInputRef.current?.click(); }}
+                disabled={!localSales || localSales.length === 0 || (isSubmitted && !isAdmin)}
+                data-testid="button-upload-sales-data"
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-l-xl font-medium shadow-sm hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed border-r border-primary-foreground/20"
+              >
+                <Upload className="w-4 h-4" />
+                Import
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    disabled={!localSales || localSales.length === 0 || (isSubmitted && !isAdmin)}
+                    data-testid="button-import-dropdown"
+                    className="flex items-center px-2 py-2 bg-primary text-primary-foreground rounded-r-xl font-medium shadow-sm hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => { setUploadResult(null); excelFileInputRef.current?.click(); }}
+                    disabled={!localSales || localSales.length === 0 || (isSubmitted && !isAdmin)}
+                    data-testid="menu-import-excel"
+                  >
+                    <Upload className="w-4 h-4 mr-2" /> Upload Sales Data by Date
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleDownloadTemplate}
+                    disabled={!localSales || localSales.length === 0}
+                    data-testid="menu-download-template"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 mr-2" /> Download sample template
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <input
+              ref={excelFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleUploadExcel}
+              data-testid="input-upload-excel"
+            />
+            {uploadResult && (
+              <span className="text-xs font-medium text-muted-foreground bg-card border border-border rounded-lg px-3 py-1.5 flex items-center gap-2">
+                <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                <span className="text-green-700 font-semibold">{uploadResult.updated} updated</span>
+                {uploadResult.skipped > 0 && <span>· {uploadResult.skipped} skipped</span>}
+                {uploadResult.notFound > 0 && <span className="text-amber-600">· {uploadResult.notFound} not matched</span>}
+                <span className="text-muted-foreground/60">— review & click Save Sales</span>
+              </span>
+            )}
+
             <button
               onClick={() => {
-                // Default the range to the currently viewed date.
                 setExportFromDate(selectedDate);
                 setExportToDate(selectedDate);
                 setExportDialogOpen(true);
