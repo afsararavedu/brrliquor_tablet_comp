@@ -161,24 +161,6 @@ export default function Sales() {
     [availableSalesDatesData],
   );
 
-  // Sorted list of navigable dates = all dates with data + today
-  const sortedAvailableDates = useMemo(() => {
-    const today = getTodayLocal();
-    const all = new Set([...availableSalesDateSet, today]);
-    return Array.from(all).sort();
-  }, [availableSalesDateSet]);
-
-  // Previous / next available date for the arrow buttons
-  const prevAvailableDate = useMemo(() => {
-    const before = sortedAvailableDates.filter(d => d < selectedDate);
-    return before.length > 0 ? before[before.length - 1] : null;
-  }, [selectedDate, sortedAvailableDates]);
-
-  const nextAvailableDate = useMemo(() => {
-    const after = sortedAvailableDates.filter(d => d > selectedDate);
-    return after.length > 0 ? after[0] : null;
-  }, [selectedDate, sortedAvailableDates]);
-
   // On first load: if today has no data, jump straight to the most recent date that does
   const hasAutoSelected = useRef(false);
   useEffect(() => {
@@ -974,13 +956,18 @@ export default function Sales() {
           <h2 className="text-xl font-semibold text-foreground">{shopName}</h2>
         </div>
         <div className="flex items-center gap-1">
-          {/* Previous Available Date Button */}
+          {/* Previous Day Button */}
           <button
             data-testid="button-prev-date"
-            onClick={() => { if (prevAvailableDate) setSelectedDate(prevAvailableDate); }}
-            disabled={!prevAvailableDate}
+            onClick={() => {
+              const d = parseDateLocal(selectedDate);
+              d.setDate(d.getDate() - 1);
+              const prev = formatDateLocal(d);
+              if (prev >= earliestOrderDateStr) setSelectedDate(prev);
+            }}
+            disabled={selectedDate <= earliestOrderDateStr}
             className="p-2 rounded-lg border border-border bg-card hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Previous date with data"
+            title="Previous day"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -1017,21 +1004,15 @@ export default function Sales() {
                 disabled={(date) => {
                   const dateStr = format(date, "yyyy-MM-dd");
                   const todayStr = format(new Date(), "yyyy-MM-dd");
-                  // Always allow today (user can start entering sales)
-                  if (dateStr === todayStr) return false;
                   // Block future dates
                   if (dateStr > todayStr) return true;
-                  // Block dates before the earliest order
+                  // Block dates before the earliest order invoice date
                   if (dateStr < earliestOrderDateStr) return true;
                   // For non-admins: block dates older than 7 days
                   if (!isAdmin) {
                     const sevenDaysAgo = subDays(new Date(), 6);
                     sevenDaysAgo.setHours(0, 0, 0, 0);
                     if (date < sevenDaysAgo) return true;
-                  }
-                  // Only enable dates that actually have sales data
-                  if (availableSalesDateSet.size > 0) {
-                    return !availableSalesDateSet.has(dateStr);
                   }
                   return false;
                 }}
@@ -1040,13 +1021,19 @@ export default function Sales() {
             </PopoverContent>
           </Popover>
 
-          {/* Next Available Date Button */}
+          {/* Next Day Button */}
           <button
             data-testid="button-next-date"
-            onClick={() => { if (nextAvailableDate) setSelectedDate(nextAvailableDate); }}
-            disabled={!nextAvailableDate}
+            onClick={() => {
+              const d = parseDateLocal(selectedDate);
+              d.setDate(d.getDate() + 1);
+              const next = formatDateLocal(d);
+              const today = getTodayLocal();
+              if (next <= today) setSelectedDate(next);
+            }}
+            disabled={selectedDate >= getTodayLocal()}
             className="p-2 rounded-lg border border-border bg-card hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Next date with data"
+            title="Next day"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
