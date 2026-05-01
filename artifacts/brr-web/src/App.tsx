@@ -39,12 +39,12 @@ function Router() {
       {user && !user.mustResetPassword && (
         <Sidebar drawerOpen={drawerOpen} onDrawerClose={() => setDrawerOpen(false)} />
       )}
-      <div className={`flex-1 ${user && !user.mustResetPassword ? 'md:pl-64' : ''} flex flex-col min-h-screen transition-all`}>
+      <div className={`flex-1 min-w-0 ${user && !user.mustResetPassword ? 'md:pl-64' : ''} flex flex-col min-h-screen transition-all`}>
         {user && !user.mustResetPassword && (
           <Header onMenuClick={() => setDrawerOpen(true)} />
         )}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-x-auto">
-          <div className="w-full">
+        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 overflow-x-hidden">
+          <div className="w-full min-w-0">
             <Switch>
               <Route path="/auth" component={AuthPage} />
               <Route path="/reset-password" component={ResetPassword} />
