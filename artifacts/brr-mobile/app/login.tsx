@@ -39,6 +39,13 @@ export default function LoginScreen() {
   // Wall-clock time (ms) at which the lockout expires, or null if not locked.
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
+  // How many failed attempts the server says we have left before the
+  // lockout kicks in. Populated from the 401 response body and only
+  // surfaced when the count is uncomfortably low. Cleared on each new
+  // submit so the warning can't linger after a successful retry.
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(
+    null,
+  );
 
   // Countdown interval — only active while we're locked out so the
   // submit button re-enables itself the moment the lockout window passes.
@@ -65,6 +72,7 @@ export default function LoginScreen() {
   const onSubmit = async () => {
     if (!username || !password || submitting || isLocked) return;
     setSubmitting(true);
+    setAttemptsRemaining(null);
     if (Platform.OS !== "web") {
       Haptics.selectionAsync().catch(() => {});
     }
@@ -78,6 +86,13 @@ export default function LoginScreen() {
             ? Math.ceil(data.retryAfterSec)
             : 60;
         setLockoutUntil(Date.now() + sec * 1000);
+      } else if (e instanceof ApiError && e.status === 401) {
+        // 401 carries `attemptsRemaining` so we can warn the user
+        // before the next miss locks them out for 15 minutes.
+        const data = (e.data ?? {}) as { attemptsRemaining?: unknown };
+        if (typeof data.attemptsRemaining === "number") {
+          setAttemptsRemaining(Math.max(0, data.attemptsRemaining));
+        }
       }
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
@@ -177,9 +192,27 @@ export default function LoginScreen() {
                   </Text>
                 </View>
               ) : error ? (
-                <Text style={[styles.error, { color: colors.destructive }]}>
-                  {error}
-                </Text>
+                <View>
+                  <Text style={[styles.error, { color: colors.destructive }]}>
+                    {error}
+                  </Text>
+                  {attemptsRemaining !== null &&
+                    attemptsRemaining <= 2 ? (
+                    <Text
+                      style={[
+                        styles.attemptsWarning,
+                        { color: colors.destructive },
+                      ]}
+                      testID="login-attempts-warning"
+                    >
+                      {attemptsRemaining === 0
+                        ? "No attempts remaining — this account is now temporarily locked."
+                        : attemptsRemaining === 1
+                          ? "1 attempt remaining before this account is temporarily locked."
+                          : `${attemptsRemaining} attempts remaining before this account is temporarily locked.`}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
 
               <Pressable
@@ -300,6 +333,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontFamily: "Inter_500Medium",
     fontSize: 13,
+    textAlign: "center",
+  },
+  attemptsWarning: {
+    marginTop: 6,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
     textAlign: "center",
   },
   lockoutBox: {

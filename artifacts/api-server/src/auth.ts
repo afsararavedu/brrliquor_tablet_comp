@@ -11,6 +11,7 @@ import {
   loginKeysFor,
   recordFailure,
   recordSuccess,
+  remainingAttempts,
 } from "./loginRateLimiter";
 
 const DEV_SESSION_SECRET_FALLBACK = "salespro-dev-only-not-for-production";
@@ -220,9 +221,16 @@ export function setupAuth(app: Express) {
         if (err) return next(err);
         if (!user) {
           recordFailure(keys);
-          return res
-            .status(401)
-            .json({ message: "Invalid username or password" });
+          // Tell the client how many more failed attempts are tolerated
+          // before the lockout kicks in, so the login UI can warn the
+          // user before they accidentally lock themselves out for 15
+          // minutes. Computed *after* recordFailure so the count
+          // reflects the attempt that just failed.
+          const attemptsRemaining = remainingAttempts(keys);
+          return res.status(401).json({
+            message: "Invalid username or password",
+            attemptsRemaining,
+          });
         }
         return req.login(user, (loginErr) => {
           if (loginErr) return next(loginErr);

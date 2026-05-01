@@ -127,6 +127,38 @@ export function recordFailure(keys: string[]): void {
 }
 
 /**
+ * How many more failed login attempts the supplied keys can absorb
+ * before the most-restrictive key crosses MAX_FAILURES and is locked.
+ *
+ * Returns the *minimum* across all supplied keys, so the value matches
+ * the worst-case experience the user is about to have. A fresh key with
+ * no record contributes the full MAX_FAILURES budget. A key whose
+ * window has already rolled over is treated as having zero failures so
+ * we don't under-report the remaining budget.
+ *
+ * Callers should fold this into the 401 response (e.g. as an
+ * `attemptsRemaining` field) so the login UI can warn the user before
+ * they accidentally tip themselves into a 15-minute lockout. Returns 0
+ * when one of the keys has already hit the failure threshold — at that
+ * point the next call to `checkLocked` will refuse the request anyway.
+ */
+export function remainingAttempts(keys: string[]): number {
+  const now = Date.now();
+  let min = MAX_FAILURES;
+  for (const key of keys) {
+    const r = records.get(key);
+    if (!r) continue;
+    let failures = r.failures;
+    if (now - r.windowStart > WINDOW_MS && now >= r.lockedUntil) {
+      failures = 0;
+    }
+    const remaining = Math.max(0, MAX_FAILURES - failures);
+    if (remaining < min) min = remaining;
+  }
+  return min;
+}
+
+/**
  * Clear every supplied key. Called after a successful login so an honest
  * user who fat-fingered their password isn't kept partway to a lockout.
  */

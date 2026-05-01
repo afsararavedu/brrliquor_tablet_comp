@@ -42,6 +42,14 @@ export default function AuthPage() {
   // to render inline above the button. The destructive toast still fires
   // for these via use-auth, but this gives an additional clear inline cue.
   const [inlineError, setInlineError] = useState<string | null>(null);
+  // How many login attempts the server says we have left before the
+  // lockout kicks in. Populated from the 401 response body and only
+  // used to render the "X attempts remaining" warning when the count
+  // gets uncomfortably low. Cleared on submit so the warning can't
+  // linger after a successful retry.
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(
+    null,
+  );
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -90,6 +98,7 @@ export default function AuthPage() {
   const onSubmit = (data: z.infer<typeof loginSchema>) => {
     if (isLocked) return;
     setInlineError(null);
+    setAttemptsRemaining(null);
     loginMutation.mutate(data, {
       onError: (error) => {
         if (error instanceof ApiError && error.status === 429) {
@@ -109,6 +118,14 @@ export default function AuthPage() {
               ? "Invalid username or password."
               : error.message,
           );
+          // 401 carries `attemptsRemaining` so we can warn the user
+          // before the next miss locks them out for 15 minutes.
+          if (error instanceof ApiError && error.status === 401) {
+            const body = (error.body ?? {}) as { attemptsRemaining?: unknown };
+            if (typeof body.attemptsRemaining === "number") {
+              setAttemptsRemaining(Math.max(0, body.attemptsRemaining));
+            }
+          }
         }
       },
     });
@@ -208,7 +225,20 @@ export default function AuthPage() {
                     data-testid="login-error"
                     className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
                   >
-                    {inlineError}
+                    <div>{inlineError}</div>
+                    {attemptsRemaining !== null &&
+                      attemptsRemaining <= 2 && (
+                        <div
+                          className="mt-1 font-semibold"
+                          data-testid="login-attempts-warning"
+                        >
+                          {attemptsRemaining === 0
+                            ? "No attempts remaining — this account is now temporarily locked."
+                            : attemptsRemaining === 1
+                              ? "1 attempt remaining before this account is temporarily locked."
+                              : `${attemptsRemaining} attempts remaining before this account is temporarily locked.`}
+                        </div>
+                      )}
                   </div>
                 )}
                 <button
