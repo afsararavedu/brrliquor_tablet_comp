@@ -312,14 +312,121 @@ If you need faster rollback (no rebuild), copy `release/api/dist/` and `release/
 
 ---
 
-## 12. Known limitations
+## 12. Database backups
+
+RDS takes automated daily snapshots of your DB instance, but the default retention window is **only 1 day** -- if you don't change it, a corruption that goes unnoticed for 36 hours has nothing to restore from. This section walks through enabling a longer retention window, taking manual snapshots before risky changes, and verifying / restoring.
+
+### 12.1 Enable daily automated snapshots (>= 7 days retention)
+
+You set this on the DB instance itself. Pick a backup window during your lowest-traffic hour (snapshots briefly add I/O load).
+
+**Console**: RDS → Databases → `brr-db` → **Modify** → "Additional configuration" → **Backup**:
+- Backup retention period: **7 days** (14 or 30 is also fine; longer = more storage cost).
+- Backup window: a 30-minute window during off-peak hours, e.g. `07:00-07:30 UTC`.
+- Apply immediately: yes (this change is online, no restart needed).
+
+**CLI** equivalent:
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier brr-db \
+  --backup-retention-period 7 \
+  --preferred-backup-window 07:00-07:30 \
+  --apply-immediately
+```
+
+After the modify completes you can confirm the setting:
+```bash
+aws rds describe-db-instances \
+  --db-instance-identifier brr-db \
+  --query 'DBInstances[0].{Retention:BackupRetentionPeriod,Window:PreferredBackupWindow}'
+```
+
+### 12.2 Take a manual snapshot before risky changes
+
+Automated snapshots roll off after the retention window. **Manual** snapshots stay until you delete them, which is exactly what you want before a schema migration, a `drizzle-kit push` against a non-empty database, or any bulk data fix.
+
+This repo ships a small helper at `scripts/deploy/db-snapshot.sh`:
+```bash
+# default: instance "brr-db", region "us-east-1", tag "manual"
+bash scripts/deploy/db-snapshot.sh
+
+# override any of those:
+DB_INSTANCE_ID=brr-db AWS_REGION=us-east-1 SNAPSHOT_TAG=pre-migration \
+  bash scripts/deploy/db-snapshot.sh
+```
+The script wraps `aws rds create-db-snapshot` and stamps the snapshot id with a UTC timestamp (e.g. `brr-db-pre-migration-20260501-071530`) so they're easy to find in the console.
+
+The CLI equivalent if you don't have the repo handy:
+```bash
+aws rds create-db-snapshot \
+  --db-instance-identifier brr-db \
+  --db-snapshot-identifier brr-db-pre-migration-$(date -u +%Y%m%d-%H%M%S)
+```
+
+### 12.3 Verify the most recent snapshot age
+
+Check this monthly, and any time you're about to rely on a restore.
+
+**Console**: RDS → Snapshots → filter by DB instance `brr-db`. The list shows "Snapshot creation time"; the newest **automated** entry should be no older than 24 hours.
+
+**CLI** -- show the three most recent snapshots (automated + manual) for the instance:
+```bash
+aws rds describe-db-snapshots \
+  --db-instance-identifier brr-db \
+  --query 'reverse(sort_by(DBSnapshots,&SnapshotCreateTime))[0:3].{Id:DBSnapshotIdentifier,When:SnapshotCreateTime,Type:SnapshotType,Status:Status}' \
+  --output table
+```
+If the newest `automated` snapshot is more than ~26 hours old, the backup window may not be running -- re-check `BackupRetentionPeriod` (must be > 0) and the configured `PreferredBackupWindow`.
+
+### 12.4 Restore procedure (test this once before you need it)
+
+You **cannot** restore a snapshot in place over an existing instance. RDS always restores into a **new** DB instance, and you cut over by repointing `DATABASE_URL`. This is also exactly the procedure to test, because it's what you'll do under pressure.
+
+1. **Pick a snapshot.** From the snapshots list (`aws rds describe-db-snapshots ...` above) pick the snapshot id you want to restore from -- e.g. the latest automated one, or a specific manual one.
+
+2. **Restore into a new instance.** Use the same engine version, instance class, and subnet group as `brr-db` so the result is plug-compatible:
+   ```bash
+   aws rds restore-db-instance-from-db-snapshot \
+     --db-instance-identifier brr-db-restore \
+     --db-snapshot-identifier <snapshot-id-from-step-1> \
+     --db-subnet-group-name <same-as-brr-db> \
+     --vpc-security-group-ids <brr-rds-sg-id>
+   ```
+   This takes 5-15 minutes for a small DB. Wait until status is `available`:
+   ```bash
+   aws rds describe-db-instances --db-instance-identifier brr-db-restore \
+     --query 'DBInstances[0].{Status:DBInstanceStatus,Endpoint:Endpoint.Address}'
+   ```
+
+3. **Smoke-test the restored instance** before cutting traffic over. From the EC2 box:
+   ```bash
+   PGPASSWORD=<master-password> psql \
+     "host=<brr-db-restore-endpoint> port=5432 user=brr dbname=brr sslmode=require" \
+     -c 'select count(*) from users; select count(*) from sessions;'
+   ```
+
+4. **Cut over.** Edit `/etc/brr/brr-api.env`, replace the host in `DATABASE_URL` with the restored instance's endpoint, then:
+   ```bash
+   sudo systemctl restart brr-api
+   journalctl -u brr-api -n 30 --no-pager   # confirm "Server listening" + no DB errors
+   ```
+
+5. **Tidy up.** Once you're confident the restored instance is healthy, you can either:
+   - Rename the new instance back to `brr-db` (delete the broken old one first, then `aws rds modify-db-instance --db-instance-identifier brr-db-restore --new-db-instance-identifier brr-db --apply-immediately`), or
+   - Leave the new identifier in place and just keep the updated `DATABASE_URL`.
+
+> **Restore drill**: do the above end-to-end at least once on a non-critical day (e.g. into `brr-db-restore-test`), confirm the app comes up against it, then `aws rds delete-db-instance --db-instance-identifier brr-db-restore-test --skip-final-snapshot`. An untested backup is not a backup.
+
+---
+
+## 13. Known limitations
 
 - **Login lockout is in-process.** The brute-force protection on `/api/login` (5 failures → 15 min lockout, growing exponentially) keeps state in the api-server's memory. On a single EC2 instance this works perfectly. If you ever scale to **multiple** api-server instances behind a load balancer, an attacker could spread guesses across instances and dodge the lockout. There is a tracked task to move this state to Postgres / Redis when you're ready to scale horizontally.
 - **Sessions are stored in Postgres** (`connect-pg-simple`), so they already work across instances -- only the lockout counters don't.
 
 ---
 
-## 13. Cheat sheet -- env vars
+## 14. Cheat sheet -- env vars
 
 | Variable                  | Required?      | Where it's read |
 |---------------------------|----------------|-----------------|
