@@ -73,6 +73,22 @@ lib/
   demand via the "Reset Password" button in the sidebar.
 - Initial admin bootstrap: on first startup against an empty `users` table the api-server creates a single `admin` account. The password comes from `ADMIN_BOOTSTRAP_PASSWORD` if that env var is set (must be ≥ 8 characters), otherwise a random one is generated and printed once to the server log. The account is created with `mustResetPassword: true`, so the operator is forced to set a real password on first login. No other accounts (including any "employee" account) are seeded — additional users must be created from inside the app by an admin.
 
+## Deploying to AWS EC2
+
+A self-hosted alternative to Replit publishing. See `docs/deploy/aws-ec2.md` for
+the full runbook (EC2 + RDS Postgres + nginx + systemd). Supporting files:
+
+- `scripts/deploy/build-release.sh` — produces a `release/` folder with the
+  api-server bundle (`release/api/`) and the static web build (`release/web/`).
+- `deploy/aws-ec2/nginx.conf.example` — reverse proxy with SPA fallback and
+  `/api/*` → loopback forwarding.
+- `deploy/aws-ec2/brr-api.service.example` — systemd unit for the api-server.
+- `deploy/aws-ec2/brr-api.env.example` — env-var template (`DATABASE_URL`,
+  `SESSION_SECRET`, optional `ADMIN_BOOTSTRAP_PASSWORD`).
+
+The mobile app does not deploy to AWS; just point its build-time
+`EXPO_PUBLIC_DOMAIN` at the AWS domain so it talks to the same `/api/*`.
+
 ## Required production secrets
 
 - **`SESSION_SECRET`** — Long random string used to sign session cookies. **Required when `NODE_ENV=production`**: the api-server refuses to start without it (see `artifacts/api-server/src/index.ts`). In development a clear warning is logged and an insecure fallback is used. Generate with `openssl rand -hex 32`.

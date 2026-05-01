@@ -1,0 +1,93 @@
+# /etc/nginx/conf.d/brr.conf
+#
+# Reverse-proxy + static-file config for BRR Liquor Soft on a single EC2 box.
+#
+# Layout assumed by this file:
+#   /var/www/brr-web/     -> contents of release/web (the vite static build)
+#   127.0.0.1:8080        -> the brr-api systemd service (api-server)
+#
+# Replace `brr.example.com` with your real domain before reloading nginx.
+# After editing: `sudo nginx -t && sudo systemctl reload nginx`.
+
+# ---- HTTP -> HTTPS redirect (after you have a cert via certbot) ----
+server {
+    listen 80;
+    listen [::]:80;
+    server_name brr.example.com;
+
+    # Allow Let's Encrypt http-01 challenges to pass through.
+    location /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---- Main HTTPS server ----
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name brr.example.com;
+
+    # certbot --nginx will fill these in for you. Until then, comment the
+    # `listen 443 ssl http2` lines out and run on plain HTTP.
+    ssl_certificate     /etc/letsencrypt/live/brr.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/brr.example.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    # Allow large Excel/PDF uploads (multer + xlsx routes accept up to 10mb).
+    client_max_body_size 16m;
+
+    # ---- API: forward /api/* to the node service on loopback ----
+    # api-server already mounts everything under /api, so we proxy_pass the
+    # request URI through unchanged (no rewrite).
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+
+        # Preserve client info so express's `trust proxy` setting sees the
+        # right values (the api-server reads X-Forwarded-Proto to decide
+        # whether to mark the session cookie `secure`).
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        # Cookies must round-trip unmodified for express-session.
+        proxy_pass_request_headers on;
+        proxy_redirect off;
+
+        # Long-running requests (PDF/Excel parsing of large files).
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+
+    # ---- Static frontend with SPA fallback ----
+    # Wouter handles routing client-side, so any path that does not match a
+    # built file should fall through to index.html.
+    root /var/www/brr-web;
+    index index.html;
+
+    # Fingerprinted Vite assets in /assets/ are immutable -- cache aggressively.
+    location /assets/ {
+        try_files $uri =404;
+        access_log off;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # The HTML shell itself must NOT be cached, otherwise old clients keep
+    # loading stale asset hashes after a deploy.
+    location = /index.html {
+        add_header Cache-Control "no-store";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
