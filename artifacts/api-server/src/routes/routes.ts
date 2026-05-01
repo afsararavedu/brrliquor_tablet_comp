@@ -204,10 +204,9 @@ async function parsePdfInvoice(
   buffer: Buffer,
 ): Promise<{ orders: (typeof EMPTY_ORDER)[]; shopDetail: Record<string, string> | null }> {
   const { PDFParse } = await import("pdf-parse");
-  const uint8 = new Uint8Array(buffer);
-  const parser = new PDFParse(uint8);
-  await (parser as any).load();
+  const parser = new PDFParse({ data: buffer });
   const result = await (parser as any).getText();
+  await (parser as any).destroy();
   const allText: string = result.pages.map((p: any) => p.text).join("\n");
   const lines = allText
     .split("\n")
