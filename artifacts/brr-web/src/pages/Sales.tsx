@@ -1254,12 +1254,12 @@ export default function Sales() {
             <thead className="sticky top-0 z-20 bg-secondary shadow-sm">
               <tr className="bg-secondary border-b-2 border-border">
                 <th ref={thSnoRef} className="table-header w-[44px] min-w-[44px] whitespace-nowrap border-r border-border sticky left-0 top-0 z-30 bg-secondary">SNo</th>
-                <th ref={thBrandNoRef} className="table-header w-[84px] min-w-[84px] whitespace-nowrap border-r border-border sticky top-0 z-30 bg-secondary" style={{ left: colLeft.brandNo }}>
+                <th ref={thBrandNoRef} className="table-header w-[70px] min-w-[70px] whitespace-nowrap border-r border-border sticky top-0 z-30 bg-secondary" style={{ left: colLeft.brandNo }}>
                   <button onClick={() => handleSalesSortToggle('brandNumber')} className="flex items-center gap-1 hover:text-foreground w-full">
                     Brand No {salesSortField === 'brandNumber' ? (salesSortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
                   </button>
                 </th>
-                <th ref={thBrandNameRef} className="table-header whitespace-nowrap border-r border-border sticky top-0 z-30 bg-secondary shadow-[2px_0_0_0_rgba(0,0,0,0.04)]" style={{ left: colLeft.brandName }}>Brand Name</th>
+                <th ref={thBrandNameRef} className="table-header w-[170px] min-w-[170px] max-w-[170px] whitespace-nowrap border-r border-border sticky top-0 z-30 bg-secondary shadow-[2px_0_0_0_rgba(0,0,0,0.04)]" style={{ left: colLeft.brandName }}>Brand Name</th>
                 <th ref={thSizeRef} className="table-header w-[52px] min-w-[52px] whitespace-nowrap border-r border-border sticky top-0 z-30 bg-secondary shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]" style={{ left: colLeft.size }}>Size</th>
                 <th className="table-header w-10 border-r border-border">Qty/Cs</th>
                 <th className="table-header w-14 border-r border-border">Op. Bal (Btls)</th>
@@ -1316,10 +1316,10 @@ export default function Sales() {
                       <td className={`table-cell w-[44px] min-w-[44px] whitespace-nowrap font-mono text-xs text-muted-foreground border-r border-border sticky left-0 z-10 ${rowBg} group-hover:bg-[#fff5f4]`}>
                         {globalIdx + 1}
                       </td>
-                      <td className={`table-cell w-[84px] min-w-[84px] whitespace-nowrap font-mono text-xs text-muted-foreground border-r border-border sticky z-10 ${rowBg} group-hover:bg-[#fff5f4]`} style={{ left: colLeft.brandNo }}>
+                      <td className={`table-cell w-[70px] min-w-[70px] whitespace-nowrap font-mono text-xs text-muted-foreground border-r border-border sticky z-10 ${rowBg} group-hover:bg-[#fff5f4]`} style={{ left: colLeft.brandNo }}>
                         {item.brandNumber}
                       </td>
-                      <td className={`table-cell whitespace-nowrap font-medium border-r border-border sticky z-10 ${rowBg} group-hover:bg-[#fff5f4]`} style={{ left: colLeft.brandName }} title={item.brandName}>{item.brandName}</td>
+                      <td className={`table-cell w-[170px] min-w-[170px] max-w-[170px] truncate font-medium border-r border-border sticky z-10 ${rowBg} group-hover:bg-[#fff5f4]`} style={{ left: colLeft.brandName }} title={item.brandName}>{item.brandName}</td>
                       <td className={`table-cell w-[52px] min-w-[52px] whitespace-nowrap text-muted-foreground border-r border-border sticky z-10 ${rowBg} group-hover:bg-[#fff5f4] shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]`} style={{ left: colLeft.size }}>
                         {item.size}
                       </td>
