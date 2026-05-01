@@ -221,6 +221,28 @@ export default function Sales() {
   const excelFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadResult, setUploadResult] = useState<{ updated: number; skipped: number; notFound: number } | null>(null);
 
+  // Refs for the 4 auto-width sticky column headers — used to measure their
+  // rendered width so we can set the correct `left` offset on each sticky cell.
+  const thSnoRef      = useRef<HTMLTableCellElement>(null);
+  const thBrandNoRef  = useRef<HTMLTableCellElement>(null);
+  const thBrandNameRef = useRef<HTMLTableCellElement>(null);
+  const thSizeRef     = useRef<HTMLTableCellElement>(null);
+  const [colLeft, setColLeft] = useState({ sno: 0, brandNo: 0, brandName: 0, size: 0 });
+
+  useEffect(() => {
+    const measure = () => {
+      if (!thSnoRef.current || !thBrandNoRef.current || !thBrandNameRef.current) return;
+      const w0 = thSnoRef.current.offsetWidth;
+      const w1 = thBrandNoRef.current.offsetWidth;
+      const w2 = thBrandNameRef.current.offsetWidth;
+      setColLeft({ sno: 0, brandNo: w0, brandName: w0 + w1, size: w0 + w1 + w2 });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localSales, currentPage, pageSize, searchTerm]);
+
   // Tracks which item IDs the user has explicitly typed into a closing field this session.
   // Not touched = no sales (closing stays as total stock).
   // Touched with 0 = all sold. Touched with >0 = partial sale.
@@ -1231,14 +1253,14 @@ export default function Sales() {
           <table className="w-full min-w-[1400px] border-separate border-spacing-0">
             <thead className="sticky top-0 z-20 bg-secondary shadow-sm">
               <tr className="bg-secondary border-b-2 border-border">
-                <th className="table-header w-[44px] min-w-[44px] max-w-[44px] border-r border-border sticky left-0 top-0 z-30 bg-secondary">SNo</th>
-                <th className="table-header w-[64px] min-w-[64px] max-w-[64px] border-r border-border sticky left-[44px] top-0 z-30 bg-secondary">
+                <th ref={thSnoRef} className="table-header whitespace-nowrap border-r border-border sticky left-0 top-0 z-30 bg-secondary">SNo</th>
+                <th ref={thBrandNoRef} className="table-header whitespace-nowrap border-r border-border sticky top-0 z-30 bg-secondary" style={{ left: colLeft.brandNo }}>
                   <button onClick={() => handleSalesSortToggle('brandNumber')} className="flex items-center gap-1 hover:text-foreground w-full">
                     Brand No {salesSortField === 'brandNumber' ? (salesSortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
                   </button>
                 </th>
-                <th className="table-header w-[200px] min-w-[200px] max-w-[200px] border-r border-border sticky left-[108px] top-0 z-30 bg-secondary shadow-[2px_0_0_0_rgba(0,0,0,0.04)]">Brand Name</th>
-                <th className="table-header w-[70px] min-w-[70px] max-w-[70px] border-r border-border sticky left-[308px] top-0 z-30 bg-secondary shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]">Size</th>
+                <th ref={thBrandNameRef} className="table-header whitespace-nowrap border-r border-border sticky top-0 z-30 bg-secondary shadow-[2px_0_0_0_rgba(0,0,0,0.04)]" style={{ left: colLeft.brandName }}>Brand Name</th>
+                <th ref={thSizeRef} className="table-header whitespace-nowrap border-r border-border sticky top-0 z-30 bg-secondary shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]" style={{ left: colLeft.size }}>Size</th>
                 <th className="table-header w-10 border-r border-border">Qty/Cs</th>
                 <th className="table-header w-14 border-r border-border">Op. Bal (Btls)</th>
                 <th className="table-header w-16 text-right bg-green-50/50 border-r border-border">New Stk (Cs)</th>
@@ -1291,14 +1313,14 @@ export default function Sales() {
                       key={item.id}
                       className={`transition-colors group ${rowBg} hover:bg-primary/5 ${isSubmitted ? "opacity-90" : ""}`}
                     >
-                      <td className={`table-cell font-mono text-xs text-muted-foreground border-r border-border sticky left-0 z-10 ${rowBg} group-hover:bg-[#fff5f4]`}>
+                      <td className={`table-cell whitespace-nowrap font-mono text-xs text-muted-foreground border-r border-border sticky left-0 z-10 ${rowBg} group-hover:bg-[#fff5f4]`}>
                         {globalIdx + 1}
                       </td>
-                      <td className={`table-cell font-mono text-xs text-muted-foreground border-r border-border sticky left-[44px] z-10 ${rowBg} group-hover:bg-[#fff5f4]`}>
+                      <td className={`table-cell whitespace-nowrap font-mono text-xs text-muted-foreground border-r border-border sticky z-10 ${rowBg} group-hover:bg-[#fff5f4]`} style={{ left: colLeft.brandNo }}>
                         {item.brandNumber}
                       </td>
-                      <td className={`table-cell font-medium border-r border-border sticky left-[108px] z-10 ${rowBg} group-hover:bg-[#fff5f4] truncate`} title={item.brandName}>{item.brandName}</td>
-                      <td className={`table-cell text-muted-foreground border-r border-border sticky left-[308px] z-10 ${rowBg} group-hover:bg-[#fff5f4] shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]`}>
+                      <td className={`table-cell whitespace-nowrap font-medium border-r border-border sticky z-10 ${rowBg} group-hover:bg-[#fff5f4]`} style={{ left: colLeft.brandName }} title={item.brandName}>{item.brandName}</td>
+                      <td className={`table-cell whitespace-nowrap text-muted-foreground border-r border-border sticky z-10 ${rowBg} group-hover:bg-[#fff5f4] shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]`} style={{ left: colLeft.size }}>
                         {item.size}
                       </td>
                       <td className="table-cell text-muted-foreground border-r border-border">
