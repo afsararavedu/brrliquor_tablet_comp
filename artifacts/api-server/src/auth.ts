@@ -6,6 +6,12 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { User as SelectUser } from "@workspace/db";
 import { logger } from "./lib/logger";
+import {
+  checkLocked,
+  loginKeysFor,
+  recordFailure,
+  recordSuccess,
+} from "./loginRateLimiter";
 
 const DEV_SESSION_SECRET_FALLBACK = "salespro-dev-only-not-for-production";
 
@@ -180,8 +186,51 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/login", passport.authenticate("local"), (req, res) => {
-    res.status(200).json(safeUserResponse(req.user as SelectUser));
+  // Brute-force protection: refuse to even check the password once an
+  // attacker has burned through too many failures for this username or
+  // this IP. Both the main password and the temp-password code paths
+  // route through the LocalStrategy below, so this single gate covers
+  // both — an attacker can't pivot to /api/login with the temp-password
+  // path to dodge the lockout.
+  app.post("/api/login", (req, res, next) => {
+    const username = req.body?.username;
+    const keys = loginKeysFor(req, username);
+
+    const lockState = checkLocked(keys);
+    if (lockState.locked) {
+      res.setHeader("Retry-After", String(lockState.retryAfterSec));
+      logger.warn(
+        {
+          username: typeof username === "string" ? username : undefined,
+          ip: req.ip,
+          retryAfterSec: lockState.retryAfterSec,
+        },
+        "Login rejected: too many failed attempts",
+      );
+      return res.status(429).json({
+        message:
+          "Too many failed login attempts. Please try again later.",
+        retryAfterSec: lockState.retryAfterSec,
+      });
+    }
+
+    return passport.authenticate(
+      "local",
+      (err: Error | null, user: SelectUser | false) => {
+        if (err) return next(err);
+        if (!user) {
+          recordFailure(keys);
+          return res
+            .status(401)
+            .json({ message: "Invalid username or password" });
+        }
+        return req.login(user, (loginErr) => {
+          if (loginErr) return next(loginErr);
+          recordSuccess(keys);
+          return res.status(200).json(safeUserResponse(user));
+        });
+      },
+    )(req, res, next);
   });
 
   app.post("/api/logout", (req, res, next) => {
