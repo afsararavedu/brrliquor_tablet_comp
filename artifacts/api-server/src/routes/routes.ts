@@ -1276,6 +1276,16 @@ export async function registerRoutes(
     }
   });
 
+  // Returns all distinct dates that have a daily_stock snapshot (YYYY-MM-DD[])
+  app.get("/api/daily-stock/available-dates", requireAuth, async (_req, res) => {
+    try {
+      const dates = await storage.getAvailableStockDates();
+      res.json({ dates });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch available stock dates" });
+    }
+  });
+
   // Daily stock by date
   app.get("/api/daily-stock", async (req, res) => {
     const date = req.query.date as string | undefined;
@@ -1418,6 +1428,16 @@ export async function registerRoutes(
       res.json({ invoiceDate: date });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch earliest invoice date" });
+    }
+  });
+
+  // Returns all distinct sale dates that have data in daily_sales (YYYY-MM-DD[])
+  app.get("/api/sales/available-dates", requireAuth, async (_req, res) => {
+    try {
+      const dates = await storage.getAvailableSalesDates();
+      res.json({ dates });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch available sales dates" });
     }
   });
 

@@ -55,6 +55,7 @@ export interface IStorage {
   getDailySales(): Promise<DailySale[]>;
   getDailySalesByDate(date: string): Promise<DailySale[]>;
   getEarliestInvoiceDate(): Promise<string | null>;
+  getAvailableSalesDates(): Promise<string[]>;
   bulkUpdateDailySales(sales: InsertDailySale[]): Promise<DailySale[]>;
   bulkUpdateDailySalesForDate(sales: InsertDailySale[], date: string): Promise<DailySale[]>;
   deleteDailySale(id: number): Promise<void>;
@@ -82,6 +83,7 @@ export interface IStorage {
 
   // Daily Stock Snapshots
   getDailyStockByDate(date: string): Promise<DailyStock[]>;
+  getAvailableStockDates(): Promise<string[]>;
   getMostRecentDailyStockBefore(date: string): Promise<DailyStock[]>;
   upsertDailyStockSnapshot(date: string): Promise<void>;
   replaceFullDailyStockSnapshot(date: string): Promise<void>;
@@ -172,6 +174,15 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(dailySales.invoiceDate))
       .limit(1);
     return result[0]?.invoiceDate ?? null;
+  }
+
+  async getAvailableSalesDates(): Promise<string[]> {
+    const result = await db
+      .selectDistinct({ saleDate: dailySales.saleDate })
+      .from(dailySales)
+      .where(sql`${dailySales.saleDate} IS NOT NULL`)
+      .orderBy(asc(dailySales.saleDate));
+    return result.map(r => r.saleDate).filter(Boolean) as string[];
   }
 
   async bulkUpdateDailySales(salesData: InsertDailySale[]): Promise<DailySale[]> {
@@ -905,6 +916,15 @@ export class DatabaseStorage implements IStorage {
 
   async getDailyStockByDate(date: string): Promise<DailyStock[]> {
     return await db.select().from(dailyStock).where(eq(dailyStock.date, date));
+  }
+
+  async getAvailableStockDates(): Promise<string[]> {
+    const result = await db
+      .selectDistinct({ date: dailyStock.date })
+      .from(dailyStock)
+      .where(sql`${dailyStock.date} IS NOT NULL`)
+      .orderBy(asc(dailyStock.date));
+    return result.map(r => r.date).filter(Boolean) as string[];
   }
 
   async getMostRecentDailyStockBefore(date: string): Promise<DailyStock[]> {

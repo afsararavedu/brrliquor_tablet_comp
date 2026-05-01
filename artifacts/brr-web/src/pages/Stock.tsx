@@ -46,6 +46,15 @@ export default function Stock() {
     ? parse(earliestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
     : new Date("2020-01-01");
 
+  // All dates that have a saved stock snapshot — used to grey-out empty dates in the calendar
+  const { data: availableStockDatesData } = useQuery<{ dates: string[] }>({
+    queryKey: ["/api/daily-stock/available-dates"],
+  });
+  const availableStockDateSet = useMemo(
+    () => new Set(availableStockDatesData?.dates ?? []),
+    [availableStockDatesData],
+  );
+
   // Current stock (editable, always today's live data)
   const { data: stock, isLoading } = useQuery<StockDetail[]>({
     queryKey: [api.stock.list.path],
@@ -162,10 +171,17 @@ export default function Stock() {
                   fromDate={earliestOrderDate}
                   toDate={new Date()}
                   disabled={(date) => {
-                    // Disable only future dates — all past dates with snapshots are valid
-                    const today = new Date();
-                    today.setHours(23, 59, 59, 999);
-                    return date > today;
+                    const dateStr = format(date, "yyyy-MM-dd");
+                    const todayStr = getTodayLocal();
+                    // Always allow today (current stock view)
+                    if (dateStr === todayStr) return false;
+                    // Block future dates
+                    if (dateStr > todayStr) return true;
+                    // Only enable past dates that have a saved stock snapshot
+                    if (availableStockDateSet.size > 0) {
+                      return !availableStockDateSet.has(dateStr);
+                    }
+                    return false;
                   }}
                   initialFocus
                 />

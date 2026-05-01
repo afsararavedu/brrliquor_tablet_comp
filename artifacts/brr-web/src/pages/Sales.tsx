@@ -152,6 +152,15 @@ export default function Sales() {
   });
   const latestOrderDateStr = latestOrderDateData?.invoiceDate ?? format(new Date(), "yyyy-MM-dd");
 
+  // All dates that have actual sales data — used to grey-out empty dates in the calendar
+  const { data: availableSalesDatesData } = useQuery<{ dates: string[] }>({
+    queryKey: ["/api/sales/available-dates"],
+  });
+  const availableSalesDateSet = useMemo(
+    () => new Set(availableSalesDatesData?.dates ?? []),
+    [availableSalesDatesData],
+  );
+
   // No auto-switch needed: the selectable range is [earliestOrderDate, today]
   // so any date with orders is always a valid selection
 
@@ -983,16 +992,25 @@ export default function Sales() {
                 fromDate={earliestOrderDate}
                 toDate={new Date()}
                 disabled={(date) => {
-                  const floor = new Date(earliestOrderDate);
-                  floor.setHours(0, 0, 0, 0);
-                  if (date < floor) return true;
-                  const today = new Date();
-                  today.setHours(23, 59, 59, 999);
-                  if (date > today) return true;
-                  if (isAdmin) return false;
-                  const sevenDaysAgo = subDays(new Date(), 6);
-                  sevenDaysAgo.setHours(0, 0, 0, 0);
-                  return date < sevenDaysAgo;
+                  const dateStr = format(date, "yyyy-MM-dd");
+                  const todayStr = format(new Date(), "yyyy-MM-dd");
+                  // Always allow today (user can start entering sales)
+                  if (dateStr === todayStr) return false;
+                  // Block future dates
+                  if (dateStr > todayStr) return true;
+                  // Block dates before the earliest order
+                  if (dateStr < earliestOrderDateStr) return true;
+                  // For non-admins: block dates older than 7 days
+                  if (!isAdmin) {
+                    const sevenDaysAgo = subDays(new Date(), 6);
+                    sevenDaysAgo.setHours(0, 0, 0, 0);
+                    if (date < sevenDaysAgo) return true;
+                  }
+                  // Only enable dates that actually have sales data
+                  if (availableSalesDateSet.size > 0) {
+                    return !availableSalesDateSet.has(dateStr);
+                  }
+                  return false;
                 }}
                 initialFocus
               />
