@@ -53,7 +53,10 @@ export function useUploadFile() {
         body: formData,
       });
 
-      if (!res.ok) throw new Error("Failed to upload file");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Failed to upload file");
+      }
       return api.upload.create.responses[200].parse(await res.json());
     },
   });

@@ -705,7 +705,7 @@ export default function Inventory() {
         }
         proceedWithPreview(data);
       },
-      onError: () => toast({ title: "Upload Failed", description: "Could not upload the file.", variant: "destructive" }),
+      onError: (err: any) => toast({ title: "Upload Failed", description: err?.message || "Could not upload the file.", variant: "destructive" }),
     });
   };
 

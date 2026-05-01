@@ -203,11 +203,41 @@ function parseSpreadsheet(buffer: Buffer, filename: string) {
 async function parsePdfInvoice(
   buffer: Buffer,
 ): Promise<{ orders: (typeof EMPTY_ORDER)[]; shopDetail: Record<string, string> | null }> {
-  const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: buffer });
-  const result = await (parser as any).getText();
-  await (parser as any).destroy();
-  const allText: string = result.pages.map((p: any) => p.text).join("\n");
+  // Use pdfjs-dist directly (external at build time so workers resolve correctly)
+  const { createRequire } = await import("node:module");
+  const _require = createRequire(import.meta.url);
+  const pdfjsPath = _require.resolve("pdfjs-dist/legacy/build/pdf.mjs");
+  const workerPath = _require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
+  const pdfjs = await import(pdfjsPath);
+  pdfjs.GlobalWorkerOptions.workerSrc = `file://${workerPath}`;
+
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true });
+  const doc = await loadingTask.promise;
+
+  // Extract text in natural content-stream order (left→right within each Y band,
+  // top→bottom page by page). This keeps each PDF row's numbers as continuation
+  // lines that the parser's multi-line joiner picks up correctly.
+  let allText = "";
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent({ includeMarkedContent: false } as any);
+    let prevY: number | null = null;
+    let line = "";
+    for (const item of content.items as any[]) {
+      if (!("str" in item)) continue;
+      const y = Math.round(item.transform[5]);
+      if (prevY !== null && Math.abs(y - prevY) > 1) {
+        if (line.trim()) allText += line.trim() + "\n";
+        line = "";
+      }
+      line += item.str;
+      prevY = y;
+    }
+    if (line.trim()) allText += line.trim() + "\n";
+    await (page as any).cleanup();
+  }
+  await doc.destroy();
+
   const lines = allText
     .split("\n")
     .map((l: string) => l.replace(/\t/g, " ").trim())
@@ -322,7 +352,8 @@ async function parsePdfInvoice(
     // which would otherwise break the start-of-line (^) anchor in both regexes.
     const line = lines[i].trim();
     // Accept brand numbers with 2–6 digits (e.g. "19" for MCDOWELLS, up to "123456")
-    const slNoMatch = line.match(/^(\d{1,4})\s+(\d{2,6})\s+(.+)/);
+    // Allow brand name to be empty on this line (it may continue on the next line)
+    const slNoMatch = line.match(/^(\d{1,4})\s+(\d{2,6})\s*(.*)/);
     if (!slNoMatch) {
       i++;
       continue;
@@ -334,7 +365,7 @@ async function parsePdfInvoice(
     i++;
     while (
       i < lines.length &&
-      !lines[i].trim().match(/^\d{1,4}\s+\d{2,6}\s+/) &&
+      !lines[i].trim().match(/^\d{1,4}\s+\d{2,6}(\s|$)/) &&
       !lines[i].trim().match(
         /^(Duplicate|Original|Total|Grand|Sub|Breakage|Particulars|Sl\.No|Invoice\s*Value|Net\s*Invoice|Amount\s*in\s*Words)/i,
       )
