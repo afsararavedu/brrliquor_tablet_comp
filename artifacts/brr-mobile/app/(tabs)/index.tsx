@@ -1,7 +1,10 @@
+import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   FlatList,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -11,6 +14,7 @@ import {
 import { BrandHeader } from "@/components/BrandHeader";
 import { DateBar } from "@/components/DateBar";
 import { EmptyView, ErrorView, LoadingView } from "@/components/StateView";
+import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { api } from "@/lib/api";
 import { formatINR, todayISO } from "@/lib/format";
@@ -27,20 +31,37 @@ interface DailySaleRow {
   totalClosingStock?: number | null;
   closingBalanceCases?: number | null;
   closingBalanceBottles?: number | null;
+  breakageBottles?: number | null;
   soldBottles?: number | null;
   totalSaleValue?: number | string | null;
   saleValue?: number | string | null;
   mrp?: number | string | null;
+  invoiceDate?: string | null;
+  saleDate?: string | null;
 }
 
 export default function SalesTab() {
   const colors = useColors();
+  const router = useRouter();
+  const { user } = useAuth();
   const [date, setDate] = useState<string>(todayISO());
 
   const query = useQuery<DailySaleRow[]>({
     queryKey: ["sales", date],
     queryFn: () => api<DailySaleRow[]>(`/api/sales?date=${date}`),
   });
+
+  const submittedQuery = useQuery<{ isSubmitted: boolean }>({
+    queryKey: ["sales-is-submitted", date],
+    queryFn: () =>
+      api<{ isSubmitted: boolean }>(
+        `/api/sales/is-submitted?date=${encodeURIComponent(date)}`,
+      ),
+    enabled: !!date,
+  });
+
+  const isAdmin = user?.role === "admin";
+  const isLocked = !!submittedQuery.data?.isSubmitted && !isAdmin;
 
   const rows = query.data ?? [];
   const totalSold = rows.reduce(
@@ -52,10 +73,50 @@ export default function SalesTab() {
     0,
   );
 
+  const openEdit = (item: DailySaleRow) => {
+    if (isLocked) return;
+    router.push({
+      pathname: "/sale-edit",
+      params: {
+        saleDate: date,
+        brandNumber: item.brandNumber,
+        brandName: item.brandName,
+        size: item.size,
+        quantityPerCase: String(item.quantityPerCase ?? 0),
+        mrp: String(item.mrp ?? 0),
+        openingBalanceBottles: String(item.openingBalanceBottles ?? 0),
+        newStockCases: String(item.newStockCases ?? 0),
+        newStockBottles: String(item.newStockBottles ?? 0),
+        closingBalanceCases: String(item.closingBalanceCases ?? 0),
+        closingBalanceBottles: String(item.closingBalanceBottles ?? 0),
+        breakageBottles: String(item.breakageBottles ?? 0),
+        soldBottles: String(item.soldBottles ?? 0),
+        invoiceDate: item.invoiceDate ?? date,
+      },
+    });
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <BrandHeader title="Daily Sales" subtitle="Today's sales summary" />
       <DateBar date={date} onChange={setDate} />
+
+      {isLocked ? (
+        <View
+          style={[
+            styles.lockBanner,
+            { backgroundColor: colors.muted, borderColor: colors.border },
+          ]}
+        >
+          <Feather name="lock" size={14} color={colors.mutedForeground} />
+          <Text
+            style={[styles.lockText, { color: colors.mutedForeground }]}
+            numberOfLines={2}
+          >
+            Sales for this date are submitted and locked.
+          </Text>
+        </View>
+      ) : null}
 
       <View
         style={[
@@ -107,18 +168,25 @@ export default function SalesTab() {
           refreshControl={
             <RefreshControl
               refreshing={query.isRefetching}
-              onRefresh={() => query.refetch()}
+              onRefresh={() => {
+                query.refetch();
+                submittedQuery.refetch();
+              }}
               tintColor={colors.primary}
             />
           }
           renderItem={({ item }) => (
-            <View
-              style={[
+            <Pressable
+              onPress={() => openEdit(item)}
+              disabled={isLocked}
+              testID={`sale-row-${item.brandNumber}-${item.size}`}
+              style={({ pressed }) => [
                 styles.card,
                 {
                   backgroundColor: colors.card,
                   borderColor: colors.border,
                   borderRadius: colors.radius,
+                  opacity: pressed && !isLocked ? 0.85 : 1,
                 },
               ]}
             >
@@ -148,6 +216,13 @@ export default function SalesTab() {
                     {item.size}
                   </Text>
                 </View>
+                {!isLocked ? (
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={colors.mutedForeground}
+                  />
+                ) : null}
               </View>
               <View style={styles.cardGrid}>
                 <Stat
@@ -167,7 +242,7 @@ export default function SalesTab() {
                   colors={colors}
                 />
               </View>
-            </View>
+            </Pressable>
           )}
         />
       )}
@@ -206,6 +281,19 @@ function Stat({
 
 const styles = StyleSheet.create({
   root: {
+    flex: 1,
+  },
+  lockBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  lockText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
     flex: 1,
   },
   summary: {

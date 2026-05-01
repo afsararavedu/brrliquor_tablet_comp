@@ -52,6 +52,13 @@ function AuthGate() {
           headerShown: true,
         }}
       />
+      <Stack.Screen
+        name="sale-edit"
+        options={{
+          presentation: "modal",
+          headerShown: true,
+        }}
+      />
     </Stack>
   );
 }
