@@ -137,14 +137,14 @@ export default function Sales() {
     gcTime: 30_000,
   });
 
-  // Earliest order invoice date — used as floor for the date picker (oldest delivery)
-  const { data: earliestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
-    queryKey: ["/api/orders/earliest-invoice-date"],
+  // Latest order invoice date — floor for date picker (DESC LIMIT 1: only dates from last delivery to today)
+  const { data: latestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
+    queryKey: ["/api/orders/latest-invoice-date"],
   });
-  const latestOrderDate = earliestOrderDateData?.invoiceDate
-    ? parse(earliestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
-    : new Date(2020, 0, 1);
-  const latestOrderDateStr = earliestOrderDateData?.invoiceDate ?? "2020-01-01";
+  const latestOrderDate = latestOrderDateData?.invoiceDate
+    ? parse(latestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
+    : new Date();
+  const latestOrderDateStr = latestOrderDateData?.invoiceDate ?? format(new Date(), "yyyy-MM-dd");
 
   // All dates that have actual sales data — used to grey-out empty dates in the calendar
   const { data: availableSalesDatesData } = useQuery<{ dates: string[] }>({

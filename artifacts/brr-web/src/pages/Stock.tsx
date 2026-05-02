@@ -38,14 +38,14 @@ export default function Stock() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const isToday = stockViewDate === getTodayLocal();
 
-  // Earliest invoice date from orders — used as calendar floor (oldest selectable date)
-  const { data: earliestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
-    queryKey: ["/api/orders/earliest-invoice-date"],
+  // Latest invoice date from orders — floor for date picker (DESC LIMIT 1: only dates from last delivery to today)
+  const { data: latestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
+    queryKey: ["/api/orders/latest-invoice-date"],
   });
-  const latestOrderDate = earliestOrderDateData?.invoiceDate
-    ? parse(earliestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
-    : new Date("2020-01-01");
-  const latestOrderDateStr = earliestOrderDateData?.invoiceDate ?? "2020-01-01";
+  const latestOrderDate = latestOrderDateData?.invoiceDate
+    ? parse(latestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
+    : new Date();
+  const latestOrderDateStr = latestOrderDateData?.invoiceDate ?? format(new Date(), "yyyy-MM-dd");
 
   // All dates that have a saved stock snapshot — used to grey-out empty dates in the calendar
   const { data: availableStockDatesData } = useQuery<{ dates: string[] }>({
