@@ -38,14 +38,13 @@ export default function Stock() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const isToday = stockViewDate === getTodayLocal();
 
-  // Latest invoice date from orders — floor for date picker (DESC LIMIT 1: only dates from last delivery to today)
-  const { data: latestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
-    queryKey: ["/api/orders/latest-invoice-date"],
+  // Earliest invoice date from orders — used as the calendar floor (oldest selectable date)
+  // Equivalent to: SELECT DISTINCT invoice_date FROM orders ORDER BY invoice_date DESC LIMIT 1 (text sort)
+  const { data: floorDateData, isLoading: floorDateLoading } = useQuery<{ invoiceDate: string | null }>({
+    queryKey: ["/api/orders/earliest-invoice-date"],
   });
-  const latestOrderDate = latestOrderDateData?.invoiceDate
-    ? parse(latestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
-    : new Date();
-  const latestOrderDateStr = latestOrderDateData?.invoiceDate ?? format(new Date(), "yyyy-MM-dd");
+  const floorDateStr = floorDateData?.invoiceDate ?? getTodayLocal();
+  const floorDate = parse(floorDateStr, "yyyy-MM-dd", new Date());
 
   // All dates that have a saved stock snapshot — used to grey-out empty dates in the calendar
   const { data: availableStockDatesData } = useQuery<{ dates: string[] }>({
@@ -182,15 +181,16 @@ export default function Stock() {
                       setCurrentPage(1);
                     }
                   }}
-                  fromDate={latestOrderDate}
+                  fromDate={floorDate}
                   toDate={new Date()}
                   disabled={(date) => {
+                    if (floorDateLoading) return true;
                     const dateStr = format(date, "yyyy-MM-dd");
                     const todayStr = getTodayLocal();
                     // Block future dates
                     if (dateStr > todayStr) return true;
-                    // Block dates before the latest order invoice date
-                    if (dateStr < latestOrderDateStr) return true;
+                    // Block dates before the earliest order invoice date
+                    if (dateStr < floorDateStr) return true;
                     return false;
                   }}
                   initialFocus

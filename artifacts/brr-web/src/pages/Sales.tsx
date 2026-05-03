@@ -137,14 +137,13 @@ export default function Sales() {
     gcTime: 30_000,
   });
 
-  // Latest order invoice date — floor for date picker (DESC LIMIT 1: only dates from last delivery to today)
-  const { data: latestOrderDateData } = useQuery<{ invoiceDate: string | null }>({
-    queryKey: ["/api/orders/latest-invoice-date"],
+  // Earliest invoice date from orders — used as the calendar floor (oldest selectable date)
+  // Equivalent to: SELECT DISTINCT invoice_date FROM orders ORDER BY invoice_date DESC LIMIT 1 (text sort)
+  const { data: floorDateData, isLoading: floorDateLoading } = useQuery<{ invoiceDate: string | null }>({
+    queryKey: ["/api/orders/earliest-invoice-date"],
   });
-  const latestOrderDate = latestOrderDateData?.invoiceDate
-    ? parse(latestOrderDateData.invoiceDate, "yyyy-MM-dd", new Date())
-    : new Date();
-  const latestOrderDateStr = latestOrderDateData?.invoiceDate ?? format(new Date(), "yyyy-MM-dd");
+  const floorDateStr = floorDateData?.invoiceDate ?? getTodayLocal();
+  const floorDate = parse(floorDateStr, "yyyy-MM-dd", new Date());
 
   // All dates that have actual sales data — used to grey-out empty dates in the calendar
   const { data: availableSalesDatesData } = useQuery<{ dates: string[] }>({
@@ -957,9 +956,9 @@ export default function Sales() {
               const d = parseDateLocal(selectedDate);
               d.setDate(d.getDate() - 1);
               const prev = formatDateLocal(d);
-              if (prev >= latestOrderDateStr) setSelectedDate(prev);
+              if (prev >= floorDateStr) setSelectedDate(prev);
             }}
-            disabled={selectedDate <= latestOrderDateStr}
+            disabled={selectedDate <= floorDateStr || floorDateLoading}
             className="p-2 rounded-lg border border-border bg-card hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Previous day"
           >
@@ -993,15 +992,16 @@ export default function Sales() {
                     setDatePickerOpen(false);
                   }
                 }}
-                fromDate={latestOrderDate}
+                fromDate={floorDate}
                 toDate={new Date()}
                 disabled={(date) => {
+                  if (floorDateLoading) return true;
                   const dateStr = format(date, "yyyy-MM-dd");
                   const todayStr = format(new Date(), "yyyy-MM-dd");
                   // Block future dates
                   if (dateStr > todayStr) return true;
-                  // Block dates before the latest order invoice date
-                  if (dateStr < latestOrderDateStr) return true;
+                  // Block dates before the earliest order invoice date
+                  if (dateStr < floorDateStr) return true;
                   // For non-admins: block dates older than 7 days
                   if (!isAdmin) {
                     const sevenDaysAgo = subDays(new Date(), 6);
