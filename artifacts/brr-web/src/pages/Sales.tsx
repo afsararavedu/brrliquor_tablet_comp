@@ -139,10 +139,12 @@ export default function Sales() {
 
   // Earliest invoice date from orders — used as the calendar floor (oldest selectable date)
   // Equivalent to: SELECT DISTINCT invoice_date FROM orders ORDER BY invoice_date DESC LIMIT 1 (text sort)
-  const { data: floorDateData, isLoading: floorDateLoading } = useQuery<{ invoiceDate: string | null }>({
+  const { data: floorDateData } = useQuery<{ invoiceDate: string | null }>({
     queryKey: ["/api/orders/earliest-invoice-date"],
+    retry: 2,
+    staleTime: 300_000,
   });
-  const floorDateStr = floorDateData?.invoiceDate ?? getTodayLocal();
+  const floorDateStr = floorDateData?.invoiceDate ?? "2020-01-01";
   const floorDate = parse(floorDateStr, "yyyy-MM-dd", new Date());
 
   // All dates that have actual sales data — used to grey-out empty dates in the calendar
@@ -958,7 +960,7 @@ export default function Sales() {
               const prev = formatDateLocal(d);
               if (prev >= floorDateStr) setSelectedDate(prev);
             }}
-            disabled={selectedDate <= floorDateStr || floorDateLoading}
+            disabled={selectedDate <= floorDateStr}
             className="p-2 rounded-lg border border-border bg-card hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Previous day"
           >
@@ -995,14 +997,10 @@ export default function Sales() {
                 fromDate={floorDate}
                 toDate={new Date()}
                 disabled={(date) => {
-                  if (floorDateLoading) return true;
                   const dateStr = format(date, "yyyy-MM-dd");
                   const todayStr = format(new Date(), "yyyy-MM-dd");
-                  // Block future dates
                   if (dateStr > todayStr) return true;
-                  // Block dates before the earliest order invoice date
                   if (dateStr < floorDateStr) return true;
-                  // For non-admins: block dates older than 7 days
                   if (!isAdmin) {
                     const sevenDaysAgo = subDays(new Date(), 6);
                     sevenDaysAgo.setHours(0, 0, 0, 0);

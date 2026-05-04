@@ -40,10 +40,12 @@ export default function Stock() {
 
   // Earliest invoice date from orders — used as the calendar floor (oldest selectable date)
   // Equivalent to: SELECT DISTINCT invoice_date FROM orders ORDER BY invoice_date DESC LIMIT 1 (text sort)
-  const { data: floorDateData, isLoading: floorDateLoading } = useQuery<{ invoiceDate: string | null }>({
+  const { data: floorDateData } = useQuery<{ invoiceDate: string | null }>({
     queryKey: ["/api/orders/earliest-invoice-date"],
+    retry: 2,
+    staleTime: 300_000,
   });
-  const floorDateStr = floorDateData?.invoiceDate ?? getTodayLocal();
+  const floorDateStr = floorDateData?.invoiceDate ?? "2020-01-01";
   const floorDate = parse(floorDateStr, "yyyy-MM-dd", new Date());
 
   // All dates that have a saved stock snapshot — used to grey-out empty dates in the calendar
@@ -184,12 +186,9 @@ export default function Stock() {
                   fromDate={floorDate}
                   toDate={new Date()}
                   disabled={(date) => {
-                    if (floorDateLoading) return true;
                     const dateStr = format(date, "yyyy-MM-dd");
                     const todayStr = getTodayLocal();
-                    // Block future dates
                     if (dateStr > todayStr) return true;
-                    // Block dates before the earliest order invoice date
                     if (dateStr < floorDateStr) return true;
                     return false;
                   }}
