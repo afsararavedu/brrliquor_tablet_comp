@@ -122,6 +122,12 @@ type SortDir = "asc" | "desc";
 
 function parseDateStr(s: string | null | undefined): Date | null {
   if (!s) return null;
+  // yyyy-MM-dd (date picker / DB canonical format)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = parse(s, "yyyy-MM-dd", new Date());
+    return isValid(d) ? d : null;
+  }
+  // d-MMM-yyyy or dd-MMM-yyyy (PDF-parsed / legacy format, e.g. "5-Feb-2026")
   const d = parse(s, "d-MMM-yyyy", new Date());
   return isValid(d) ? d : null;
 }
